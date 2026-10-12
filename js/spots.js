@@ -50,11 +50,16 @@ export async function loadSpots() {
     }
   }
 
+  // Kystens retning udglattes over ca. 3,5 km, så havneindløb og knæk ikke giver en skæv retning
+  const nearestTo = (lat) => coast.reduce((best, p) => (Math.abs(p[0] - lat) < Math.abs(best[0] - lat) ? p : best));
+  const normalAt = (lat) => {
+    const along = bearing(nearestTo(lat - 0.016), nearestTo(lat + 0.016)); // kysten løber mod nord
+    return (along - 90 + 360) % 360; // havet ligger til venstre
+  };
+
   const spots = zones.map((line, n) => {
-    const a = line[0], b = line[line.length - 1];
-    const along = bearing(a, b); // kysten løber mod nord
-    const normal = (along - 90 + 360) % 360; // havet ligger til venstre
     const mid = line[Math.floor(line.length / 2)];
+    const normal = normalAt(mid[0]);
     return { id: `z${n}`, kind: 'zone', name: nameFor(mid[0]), line, center: mid, normal };
   });
 
@@ -77,9 +82,8 @@ export async function loadSpots() {
     if (!members.length) continue;
     const lat = members.reduce((s, m) => s + m.lat, 0) / members.length;
     const lon = members.reduce((s, m) => s + m.lon, 0) / members.length;
-    const zone = spots.filter((s) => s.kind === 'zone').reduce((best, s) => (distance(s.center, [lat, lon]) < distance(best.center, [lat, lon]) ? s : best));
     spots.push({
-      id: g.key, kind: 'trap', name: g.name, hint: g.hint, center: [lat, lon], normal: zone.normal,
+      id: g.key, kind: 'trap', name: g.name, hint: g.hint, center: [lat, lon], normal: normalAt(lat),
       trap: { side: g.side }, lines: members.map((m) => m.line),
     });
   }

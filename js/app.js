@@ -253,17 +253,19 @@ function tripsHtml() {
   }).join('');
   const rows = all.map((t) => {
     const d = new Date(t.startedAt);
+    const asking = state.view.confirmDelete === t.id;
     return `<div class="trip">
       <span class="bar ${t.model?.level || 'red'}"></span>
-      <div><strong>${DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} kl. ${pad(d.getHours())}:${pad(d.getMinutes())}</strong>
+      <button class="tripMain" data-act="ask-delete" data-id="${t.id}" aria-label="Vælg turen for at slette den"><strong>${DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} kl. ${pad(d.getHours())}:${pad(d.getMinutes())}</strong>
         <small>${esc(t.model?.spotName || '')} · ${t.durationMin} min · ${distText(t.walkedM || 0)}${t.uv ? ' · UV' : ''}</small>
-        ${t.note ? `<small>${esc(t.note)}</small>` : ''}</div>
+        ${t.note ? `<small>${esc(t.note)}</small>` : ''}</button>
       <div class="n">${t.finds}<small><br>fund</small></div>
+      ${asking ? `<div class="tripDelete"><button data-act="keep">Behold</button><button class="yes" data-act="delete" data-id="${t.id}">Slet turen</button></div>` : ''}
     </div>`;
   }).join('');
   return `<div class="sectionLabel">Rammer modellen?</div>
     <div class="calib">${calib}</div>
-    <div class="sectionLabel">Dine ture</div>
+    <div class="sectionLabel">Dine ture${all.length ? ' · tryk på en tur for at slette den' : ''}</div>
     ${rows || '<p class="empty">Ingen ture endnu. Tryk “Start tur her”, når du går ned til vandet – og log også turene uden fund.</p>'}
     <div class="tripActions">
       <button data-act="export">Del alle ture (JSON)</button>
@@ -421,6 +423,20 @@ function finishTrip() {
     finds: findsCount, uv: $('uvUsed').checked, note: $('note').value.trim(),
   };
   store.saveTrip(done);
+  leaveTripUi();
+  switchTab('ture');
+  renderPanel();
+  toast(`Turen er gemt · ${done.finds} fund`);
+}
+
+// En testtur eller en fejlstart: intet gemmes, så statistikken ikke forurenes
+function discardTrip() {
+  leaveTripUi();
+  renderPanel();
+  toast('Turen er kasseret – intet gemt');
+}
+
+function leaveTripUi() {
   store.setActiveTrip(null);
   state.trip = null;
   clearInterval(state.hudTimer);
@@ -430,9 +446,6 @@ function finishTrip() {
   $('hud').hidden = true;
   $('actionsIdle').hidden = false;
   $('actionsTrip').hidden = true;
-  switchTab('ture');
-  renderPanel();
-  toast(`Turen er gemt · ${done.finds} fund`);
 }
 
 const walked = (track) => track.reduce((s, p, i) => (i ? s + distance([track[i - 1][0], track[i - 1][1]], [p[0], p[1]]) : 0), 0);
@@ -493,7 +506,16 @@ function bindUi() {
   });
   $('tab-ture').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]');
-    if (a?.dataset.act === 'export') shareExport();
+    if (!a) return;
+    if (a.dataset.act === 'export') shareExport();
+    if (a.dataset.act === 'ask-delete') state.view.confirmDelete = a.dataset.id;
+    if (a.dataset.act === 'keep') state.view.confirmDelete = null;
+    if (a.dataset.act === 'delete') {
+      store.deleteTrip(a.dataset.id);
+      state.view.confirmDelete = null;
+      toast('Turen er slettet');
+    }
+    $('tab-ture').innerHTML = tripsHtml();
   });
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('grab').addEventListener('click', () => setSheet($('sheet').dataset.state === 'min' ? 'mid' : $('sheet').dataset.state === 'mid' ? 'max' : 'min'));
@@ -502,7 +524,11 @@ function bindUi() {
   $('btnEnd').addEventListener('click', openEnd);
   $('finds-minus').addEventListener('click', () => { findsCount = Math.max(0, findsCount - 1); $('findsOut').textContent = findsCount; });
   $('finds-plus').addEventListener('click', () => { findsCount++; $('findsOut').textContent = findsCount; });
-  $('endDlg').addEventListener('close', () => { if ($('endDlg').returnValue === 'save') finishTrip(); });
+  $('endDlg').addEventListener('close', () => {
+    const v = $('endDlg').returnValue;
+    if (v === 'save') finishTrip();
+    if (v === 'discard') discardTrip();
+  });
   $('btnLocate').addEventListener('click', () => {
     lastPan = 0;
     if (state.me) map.setView(state.me, Math.max(map.getZoom(), 15));

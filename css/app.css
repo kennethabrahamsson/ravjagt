@@ -175,6 +175,12 @@ textarea { width: 100%; background: var(--raise); color: var(--fg); border: 1px 
 .check { display: flex; gap: 10px; align-items: center; margin: 8px 0; }
 .check input { width: 22px; height: 22px; accent-color: var(--amber); }
 .row { display: flex; gap: 10px; margin-top: 16px; }
+.discard { width: 100%; margin-top: 12px; min-height: 44px; color: var(--no); font-weight: 600; font-size: 14px; }
+.trip { position: relative; }
+.tripMain { text-align: left; }
+.tripDelete { grid-column: 1 / -1; display: flex; gap: 8px; }
+.tripDelete button { flex: 1; min-height: 40px; border-radius: 10px; font-weight: 600; font-size: 14px; background: var(--raise); border: 1px solid var(--line); }
+.tripDelete .yes { color: var(--no); border-color: rgba(229, 87, 79, 0.5); }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--sheet-h, 45vh) + 16px); z-index: 1100; background: var(--fg); color: var(--ink); padding: 10px 14px; border-radius: 12px; font-weight: 600; display: flex; gap: 12px; align-items: center; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
 .toast button { color: #8a5a00; font-weight: 700; }
