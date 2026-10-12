@@ -11,7 +11,9 @@ Privat web-app til telefonen: hvor og hvornår der er rav på stranden mellem Hv
 - **Rammer modellen?** viser fund pr. time fordelt på grøn/gul/rød, så vi kan se, om farverne passer.
 - Virker offline med det seneste vejr. Din position forlader aldrig telefonen.
 
-## Modellen (v0.1 – en hypotese)
+## Modellen (v0.2 – en hypotese)
+
+Scoren svarer på: **skal jeg gå ud nu med UV-lygten?** Grøn kræver, at vinden har lagt sig, og at det er mørkt. Dagslys kan højst blive gul.
 
 Se `js/model.js`.
 
@@ -20,6 +22,7 @@ Se `js/model.js`.
 | Pålandsvind i snit over 12 timer, de sidste 3 døgn (aftager efter 12 t) | Rav driver ind med tang efter vedvarende vestenvind |
 | Bølgehøjde | Mere energi = mere materiale op fra bunden |
 | Stormen står stadig på → lavere | Rav ruller i brændingen, og det er farligt at gå |
+| Dagslys → højst gul | UV-lygten virker kun i mørke |
 | Fralandsvind nu → lavere | Intet nyt kommer ind |
 | Lavvande → højere | Mere strand fri |
 | Strøm langs kysten + side af mole | Materialet samles på den side, strømmen løber imod |

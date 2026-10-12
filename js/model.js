@@ -3,7 +3,7 @@
 // friskest lige efter, at vinden har lagt sig, og er nemmest at nå ved lavvande.
 // Strøm langs kysten skubber drivmateriale op mod den ene side af moler.
 
-export const MODEL_VERSION = '0.1';
+export const MODEL_VERSION = '0.2';
 
 const RAD = Math.PI / 180;
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -57,7 +57,8 @@ export function scoreAt(w, i, spot) {
   const onNow = onshore(w.ws[i], w.wd[i], spot.normal);
   let timing = 1;
   let phase = 'efter';
-  if (onNow > 9 && onNow > 0.85 * rawPeak) { timing = 0.7; phase = 'under'; }
+  // Stormen står på: kraftig pålandsvind, eller hård vind fra en skrå retning mod land
+  if (onNow > 7 || (w.ws[i] > 9.5 && onNow > 2)) { timing = 0.5; phase = 'under'; }
   else if (onNow < -6) { timing = 0.85; phase = 'fraland'; }
 
   const sl = w.sl[i];
@@ -77,7 +78,11 @@ export function scoreAt(w, i, spot) {
     }
   }
 
-  const score = Math.round(100 * clamp(storm * timing * trapF + tide * (storm > 0.15 ? 1 : 0.3)));
+  // Scoren svarer på "skal jeg gå ud nu med UV-lygten?". I dagslys virker lygten ikke,
+  // så dagen kan højst blive gul – rav kan stadig findes med øjnene.
+  const dark = w.isDay?.[i] === 0;
+  let score = Math.round(100 * clamp(storm * timing * trapF + tide * (storm > 0.15 ? 1 : 0.3)));
+  if (!dark) score = Math.min(54, Math.round(score * 0.65));
 
   const reasons = [];
   if (rawPeak >= 6) {
@@ -91,6 +96,7 @@ export function scoreAt(w, i, spot) {
   if (phase === 'efter' && rawPeak >= 8 && rawPeakAge > 0 && rawPeakAge <= 30) reasons.push('Vinden har lagt sig – godt tidspunkt');
   if (sl != null) reasons.push(sl < -0.2 ? 'Lavvande – stor strand fri' : sl > 0.3 ? 'Højvande – lidt strand' : 'Middel vandstand');
   if (trapNote) reasons.push(trapNote);
+  reasons.push(dark ? 'Mørkt – UV-lygten virker' : 'Lyst – UV-lygten virker ikke, led med øjnene');
 
   return {
     score, level: levelOf(score), reasons,
