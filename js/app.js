@@ -2,6 +2,7 @@ import { scoreAt, levelOf, LEVELS, lowTides, MODEL_VERSION } from './model.js';
 import { loadSpots, distance, bearing } from './spots.js';
 import { loadWeather, pointFor, hourKey } from './weather.js';
 import * as store from './store.js';
+import * as cloud from './sync.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
@@ -63,11 +64,13 @@ async function init() {
   const resumed = store.activeTrip();
   if (resumed) resumeTrip(resumed);
   startLocating();
+  runSync();
   await refreshWeather();
   setInterval(() => refreshWeather(), 30 * 60 * 1000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { refreshWeather(); if (state.trip) requestWakeLock(); }
+    if (document.visibilityState === 'visible') { refreshWeather(); runSync(); if (state.trip) requestWakeLock(); }
   });
+  window.addEventListener('online', () => runSync());
 }
 
 async function refreshWeather(force = false) {
@@ -263,13 +266,66 @@ function tripsHtml() {
       ${asking ? `<div class="tripDelete"><button data-act="keep">Behold</button><button class="yes" data-act="delete" data-id="${t.id}">Slet turen</button></div>` : ''}
     </div>`;
   }).join('');
-  return `<div class="sectionLabel">Rammer modellen?</div>
+  return `${syncHtml()}
+    <div class="sectionLabel">Rammer modellen?</div>
     <div class="calib">${calib}</div>
     <div class="sectionLabel">Dine ture${all.length ? ' · tryk på en tur for at slette den' : ''}</div>
     ${rows || '<p class="empty">Ingen ture endnu. Tryk “Start tur her”, når du går ned til vandet – og log også turene uden fund.</p>'}
     <div class="tripActions">
       <button data-act="export">Del alle ture (JSON)</button>
     </div>`;
+}
+
+/* ---------- Synkronisering ---------- */
+async function runSync() {
+  if (!cloud.isSetUp()) return;
+  state.syncing = true;
+  if (state.view.tab === 'ture') $('tab-ture').innerHTML = tripsHtml();
+  const r = await cloud.sync();
+  state.syncing = false;
+  state.syncResult = r;
+  $('tab-ture').innerHTML = tripsHtml();
+  if (r.ok && r.added) toast(`${r.added} ${r.added === 1 ? 'tur' : 'ture'} hentet fra skyen`);
+}
+
+function syncHtml() {
+  if (state.view.syncSetup) {
+    return `<div class="syncCard">
+      <strong>Gem turene i skyen</strong>
+      <p class="mute">Turene gemmes i dit private GitHub-repo <b>ravjagt-data</b>. Lav en nøgle, der kun har adgang til det repo:</p>
+      <ol class="steps">
+        <li>Åbn <a href="https://github.com/settings/personal-access-tokens/new?name=Ravjagt%20telefon&description=Synk%20af%20ture&expires_in=366&contents=write" target="_blank" rel="noopener">ny nøgle på GitHub</a>.</li>
+        <li>Under <b>Repository access</b>: vælg <b>Only select repositories</b> → <b>ravjagt-data</b>.</li>
+        <li>Tjek at <b>Contents</b> står til <b>Read and write</b>. Tryk <b>Generate token</b> og kopiér nøglen.</li>
+      </ol>
+      <label class="field"><span>Indsæt nøglen her</span>
+        <input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…"></label>
+      ${state.view.syncError ? `<p class="danger">${esc(state.view.syncError)}</p>` : ''}
+      <div class="row"><button class="ghost" data-act="sync-cancel">Annullér</button><button class="primary" data-act="sync-save">Forbind</button></div>
+      <p class="mute small">Nøglen gemmes kun på denne telefon. Den kan kun læse og skrive i ravjagt-data.</p>
+    </div>`;
+  }
+  if (!cloud.isSetUp()) {
+    return `<button class="syncCard off" data-act="sync-setup"><strong>Turene ligger kun på telefonen</strong><span class="mute">Tryk for at gemme dem i skyen</span></button>`;
+  }
+  const c = cloud.config();
+  const waiting = store.outbox().length;
+  let line;
+  if (state.syncing) line = 'Synkroniserer …';
+  else if (state.syncResult && !state.syncResult.ok) line = `Ikke synket: ${state.syncResult.msg || 'ingen forbindelse'}${waiting ? ` · ${waiting} venter` : ''}`;
+  else if (waiting) line = `${waiting} ${waiting === 1 ? 'ændring venter' : 'ændringer venter'} på net`;
+  else line = c.lastSync ? `Synket ${clock(c.lastSync)} · ${c.remoteCount ?? 0} ture i skyen` : 'Klar';
+  const ok = !waiting && (!state.syncResult || state.syncResult.ok);
+  return `<div class="syncCard ${ok ? 'on' : 'warn2'}">
+    <div><strong>${ok ? 'Gemt i skyen' : 'Synkronisering'}</strong><span class="mute">${esc(line)}</span></div>
+    <button class="syncNow" data-act="sync-now" ${state.syncing ? 'disabled' : ''}>Synk nu</button>
+  </div>`;
+}
+
+function clock(ms) {
+  const d = new Date(ms);
+  const today = new Date().toDateString() === d.toDateString();
+  return `${today ? 'i dag' : `${d.getDate()}/${d.getMonth() + 1}`} kl. ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /* ---------- Position ---------- */
@@ -427,6 +483,7 @@ function finishTrip() {
   switchTab('ture');
   renderPanel();
   toast(`Turen er gemt · ${done.finds} fund`);
+  runSync();
 }
 
 // En testtur eller en fejlstart: intet gemmes, så statistikken ikke forurenes
@@ -514,7 +571,12 @@ function bindUi() {
       store.deleteTrip(a.dataset.id);
       state.view.confirmDelete = null;
       toast('Turen er slettet');
+      runSync();
     }
+    if (a.dataset.act === 'sync-setup') { state.view.syncSetup = true; state.view.syncError = null; }
+    if (a.dataset.act === 'sync-cancel') state.view.syncSetup = false;
+    if (a.dataset.act === 'sync-now') { runSync(); return; }
+    if (a.dataset.act === 'sync-save') { connectSync(); return; }
     $('tab-ture').innerHTML = tripsHtml();
   });
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -572,6 +634,18 @@ function setSheet(s) {
 function applyNight(on) {
   document.body.classList.toggle('night', on);
   $('btnNight').setAttribute('aria-pressed', String(on));
+}
+
+async function connectSync() {
+  const token = $('syncToken').value;
+  if (!token.trim()) { state.view.syncError = 'Indsæt nøglen først.'; $('tab-ture').innerHTML = tripsHtml(); return; }
+  const btn = document.querySelector('[data-act="sync-save"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Tjekker …'; }
+  const r = await cloud.setUp(token);
+  if (!r.ok) { state.view.syncError = r.msg; $('tab-ture').innerHTML = tripsHtml(); return; }
+  state.view.syncSetup = false;
+  toast('Forbundet – dine ture gemmes nu i skyen');
+  runSync();
 }
 
 async function shareExport() {

@@ -9,7 +9,8 @@ Privat web-app til telefonen: hvor og hvornår der er rav på stranden mellem Hv
 - **Start tur her** sætter en nål, hvor du starter. En pil og en afstand viser vej tilbage, også når alt ligner hinanden i mørke. Skærmen holdes tændt.
 - **+ Fund her** sætter et fund på kortet. Ved afslutning: antal, UV ja/nej, note.
 - **Rammer modellen?** viser fund pr. time fordelt på grøn/gul/rød, så vi kan se, om farverne passer.
-- Virker offline med det seneste vejr. Din position forlader aldrig telefonen.
+- Virker offline med det seneste vejr. Din position forlader aldrig telefonen, ud over de ture du selv gemmer.
+- **Gemt i skyen:** turene synkroniseres til det private repo `kennethabrahamsson/ravjagt-data` (én fil pr. tur i `trips/`). Ændringer lægges i kø, når der ikke er net, og sendes senere. Telefonen bruger en fine-grained GitHub-nøgle med adgang til netop det repo, og den gemmes kun på telefonen.
 
 ## Modellen (v0.2 – en hypotese)
 
@@ -45,6 +46,5 @@ python3 -m http.server 8765
 
 ## Næste skridt
 
-- Synk ture til en lille database, så de ikke kun ligger på telefonen.
 - Kalibrér modellen på egne ture + Open-Meteo-arkivet.
 - Udvid til flere kyster (fx Skallingen, Blåvandshuk, Thyborøn).
