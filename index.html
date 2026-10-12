@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B1418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ravjagt">
+<meta name="description" content="Hvor og hvornår der er rav på stranden mellem Hvide Sande og Sidselbjerg.">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+<title>Ravjagt</title>
+</head>
+<body>
+<div id="map" aria-label="Kort over kysten"></div>
+
+<header class="top" id="top">
+  <div class="verdict">
+    <span class="dot" id="vDot" aria-hidden="true"></span>
+    <div class="vText">
+      <strong id="vTitle">Henter vejret …</strong>
+      <span id="vSub">Vind, bølger og vandstand fra Open-Meteo</span>
+    </div>
+    <button class="now" id="btnNow" hidden>Nu</button>
+  </div>
+  <div class="timeline" id="timeline" aria-label="Vælg tidspunkt"></div>
+</header>
+
+<div class="hud" id="hud" hidden>
+  <div class="arrow" id="arrow" aria-hidden="true">
+    <svg viewBox="0 0 48 48"><path d="M24 4 38 40 24 32 10 40Z"/></svg>
+  </div>
+  <div class="hudMain">
+    <div class="hudDist" id="hudDist">–</div>
+    <div class="hudSub" id="hudSub">til hvor du startede</div>
+  </div>
+  <div class="hudSide">
+    <div class="hudTime" id="hudTime">0:00</div>
+    <div class="hudFinds" id="hudFinds">0 fund</div>
+  </div>
+</div>
+
+<div class="fabs">
+  <button id="btnLocate" class="round" aria-label="Vis min position">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7" fill="none"/></svg>
+  </button>
+  <button id="btnLayer" class="round" aria-label="Skift mellem kort og luftfoto">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5" fill="none"/></svg>
+  </button>
+  <button id="btnNight" class="round" aria-label="Rødt natlys" aria-pressed="false">
+    <svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+  </button>
+</div>
+
+<section class="sheet" id="sheet" data-state="mid">
+  <button class="grab" id="grab" aria-label="Vis mere eller mindre"><span></span></button>
+
+  <div class="actions" id="actionsIdle">
+    <button id="btnStart" class="primary">
+      <svg viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H7"/></svg>
+      Start tur her
+    </button>
+  </div>
+  <div class="actions" id="actionsTrip" hidden>
+    <button id="btnFind" class="primary">+ Fund her</button>
+    <button id="btnEnd" class="ghost">Afslut tur</button>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="steder" aria-selected="true">Steder</button>
+    <button role="tab" data-tab="ture" aria-selected="false">Ture</button>
+    <button role="tab" data-tab="info" aria-selected="false">Sådan</button>
+  </nav>
+
+  <div class="panel" id="tab-steder" role="tabpanel"></div>
+  <div class="panel" id="tab-ture" role="tabpanel" hidden></div>
+  <div class="panel prose" id="tab-info" role="tabpanel" hidden>
+    <div class="warn">
+      <strong>Fosfor ligner rav</strong>
+      <p>Hvidt fosfor fra gamle bomber skyller op på vestkysten og kan selvantænde, når det tørrer. Læg aldrig fund i lommen – brug en metaldåse. Ryger det, så læg det i vand eller våd sand.</p>
+    </div>
+    <h3>Hvornår</h3>
+    <p>Rav er let og driver ind med tang og træstykker, når der har stået kraftig vind fra vest eller nordvest i et døgn eller mere. Det bedste tidspunkt er lige efter, at vinden har lagt sig, og ved lavvande, hvor mest strand er fri.</p>
+    <h3>Hvor</h3>
+    <p>Led i den nyeste tanglinje – den yderste fra sidste højvande – og især hvor der er små stykker træ og kul. Moler og bølgebrydere holder på drivmaterialet. Løber strømmen mod syd (vind fra nordvest), samles det på nordsiden af molen ved Hvide Sande, og omvendt.</p>
+    <h3>UV-lygten</h3>
+    <p>Brug 365 nm. Rav lyser blåhvidt til gulgrønt i mørke. Plastik og nogle skaller lyser også, så saml op og mærk: rav er let og føles lunt. Det flyder i stærkt saltvand, det gør sten ikke.</p>
+    <h3>Farverne</h3>
+    <p><span class="chip green">Grøn</span> god chance · <span class="chip yellow">Gul</span> måske · <span class="chip red">Rød</span> spild af tid. Modellen er en hypotese (version <span id="modelVersion"></span>). Den bliver kun klogere, hvis du logger alle ture – også dem uden fund.</p>
+    <h3>Data</h3>
+    <p class="mute">Vejr og hav: Open-Meteo. Kyst, moler og bølgebrydere: © OpenStreetMap-bidragydere. Kort: © CARTO, luftfoto: Esri. Din position forlader aldrig telefonen.</p>
+  </div>
+</section>
+
+<dialog id="endDlg">
+  <form method="dialog" id="endForm">
+    <h2>Afslut tur</h2>
+    <p class="mute" id="endSummary"></p>
+    <label class="field">
+      <span>Antal stykker rav</span>
+      <div class="stepper">
+        <button type="button" id="finds-minus" aria-label="Færre">−</button>
+        <output id="findsOut">0</output>
+        <button type="button" id="finds-plus" aria-label="Flere">+</button>
+      </div>
+    </label>
+    <label class="check"><input type="checkbox" id="uvUsed"> Jeg brugte UV-lygte</label>
+    <label class="field"><span>Note (valgfri)</span><textarea id="note" rows="2" placeholder="Fx største stykke, hvor i tanglinjen"></textarea></label>
+    <div class="row">
+      <button value="cancel" class="ghost" id="endCancel">Fortsæt turen</button>
+      <button value="save" class="primary" id="endSave">Gem tur</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
