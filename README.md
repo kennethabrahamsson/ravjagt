@@ -39,6 +39,18 @@ Grøn ≥ 55, gul ≥ 30. Vægtene er sat efter erfaringsregler, ikke målt. De 
 - Vejr: 66 punkter langs kysten (Open-Meteo forecast + marine).
 - Kort: Esri Dark Gray Canvas og World Imagery.
 
+## iPhone-app (ios/)
+
+En native skal om web-appen. Den native del står for GPS – også i baggrunden med slukket skærm under en tur (blå pil i statuslinjen). Positioner fra baggrunden gemmes i appen og afleveres til web-appen, når den er fremme igen. Resten (kort, model, filtre, markører, Airtable) er web-appen, hentet fra GitHub Pages, så rettelser når ud uden ny installation. Service worker virker i appen (app-bound domain), så den kan bruges offline.
+
+```bash
+cd ios
+make run      # simulatoren
+make device   # din iPhone (låst op, samme wifi eller kabel)
+```
+
+Signeres med Xcodes gratis Personal Team (team-id i `ios/Local.xcconfig`, ikke i git). Profilen udløber efter 7 dage – kør `make device` igen. Appens data (ture, Airtable-nøgle) er adskilt fra Safari/hjemmeskærms-appen; forbind Airtable én gang i appen, så hentes turene derfra.
+
 ## Kør lokalt
 
 ```bash

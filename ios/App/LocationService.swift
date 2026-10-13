@@ -62,6 +62,12 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         manager.showsBackgroundLocationIndicator = on
     }
 
+    /// Seneste kendte position – sendes, når web-appen melder klar, så den ikke skal vente på en ny
+    var lastFix: Fix? {
+        guard let l = manager.location, l.horizontalAccuracy >= 0 else { return nil }
+        return Fix(lat: l.coordinate.latitude, lon: l.coordinate.longitude, acc: l.horizontalAccuracy, t: l.timestamp.timeIntervalSince1970 * 1000)
+    }
+
     /// Positioner fra baggrunden, som web-appen ikke har fået endnu
     func takePending() -> [Fix] {
         guard let data = UserDefaults.standard.data(forKey: pendingKey),

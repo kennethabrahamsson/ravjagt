@@ -80,8 +80,9 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     private func flushPending() {
         guard webReady else { return }
-        let pending = location.takePending()
-        if !pending.isEmpty { send(pending) }
+        var fixes = location.takePending()
+        if let last = location.lastFix, (fixes.last?.t ?? 0) < last.t { fixes.append(last) }
+        if !fixes.isEmpty { send(fixes) }
     }
 
     private func send(_ fixes: [LocationService.Fix]) {
