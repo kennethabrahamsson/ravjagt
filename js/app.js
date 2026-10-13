@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 24; // samme nummer som cachen i sw.js
+const APP_VERSION = 25; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -47,7 +47,12 @@ let meMarker = null, meCircle = null, homeLine = null, trackLine = null;
 /* ---------- Opstart ---------- */
 // Inde i den native iPhone-app kommer GPS'en fra appen – også i baggrunden under en tur
 const NATIVE = !!(window.ravNative && window.webkit?.messageHandlers?.rav);
-const native = (cmd) => { try { window.webkit.messageHandlers.rav.postMessage({ cmd }); } catch {} };
+const native = (cmd, data = {}) => { try { window.webkit.messageHandlers.rav.postMessage({ cmd, ...data }); } catch {} };
+// Haptik: 'selection' (valg), 'light'/'medium' (tryk), 'success' (noget er gemt)
+function haptic(style = 'light') {
+  if (NATIVE) native('haptic', { style });
+  else if (navigator.vibrate) navigator.vibrate(style === 'success' ? [12, 40, 12] : 8);
+}
 if (NATIVE) installNativeGps();
 else if (new URLSearchParams(location.search).has('demo')) installDemoGps();
 
@@ -183,7 +188,13 @@ function scopeLabel() {
 }
 
 /* ---------- Render ---------- */
-function renderScopes() { $('scopes').innerHTML = scopeChips(); }
+const SCOPES = ['near', 'west', 'east', 'all'];
+function renderScopes() {
+  const el = $('scopes');
+  if (!el.querySelector('.thumb')) el.innerHTML = `<span class="thumb" aria-hidden="true"></span>${scopeChips()}`;
+  el.querySelectorAll('[data-scope]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.scope === state.scope)));
+  el.style.setProperty('--i', SCOPES.indexOf(state.scope));
+}
 
 function renderAll() {
   if (!state.ready) return;
@@ -273,11 +284,12 @@ function renderTimeline() {
     for (const i of idxs) {
       const lvl = levelOf(top[i]);
       const cls = ['h', lvl, s0.isDay[i] === 0 ? 'dark' : '', i === state.selIdx ? 'sel' : '', i < state.nowIdx ? 'past' : ''].join(' ');
-      html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}"><i style="height:${Math.max(10, top[i])}%"></i></button>`);
+      html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}"><i style="height:${Math.max(10, top[i])}%;--d:${Math.min(i - start, 40) * 8}ms"></i></button>`);
     }
     html.push('</div></div>');
   }
   el.innerHTML = html.join('');
+  el.classList.remove('grow'); void el.offsetWidth; el.classList.add('grow');
   const sel = el.querySelector('.sel');
   if (sel && !el.dataset.scrolled) { sel.scrollIntoView({ inline: 'start', block: 'nearest' }); el.dataset.scrolled = '1'; }
 }
@@ -358,9 +370,9 @@ function renderBest() {
   state.best = bestSpots();
   state.best.forEach((b, n) => {
     L.marker(b.pos, {
-      icon: L.divIcon({ className: '', html: `<div class="bestPin ${b.r.level}">${n + 1}</div>`, iconSize: [32, 32] }),
+      icon: L.divIcon({ className: '', html: `<div class="bestPin ${b.r.level}" style="--d:${n * 90}ms">${n + 1}</div>`, iconSize: [32, 32] }),
       title: `${n + 1}. ${b.spot.name}`, zIndexOffset: 700,
-    }).on('click', () => openSpot(b.spot.id)).addTo(bestLayer);
+    }).on('click', () => { haptic('light'); openSpot(b.spot.id); }).addTo(bestLayer);
   });
 }
 
@@ -388,7 +400,9 @@ function spotListHtml() {
       <span class="spotDist">${d != null ? distText(d) : ''}</span>
     </button>`).join('');
   const label = state.selIdx === state.nowIdx ? 'Bedst lige nu' : `Bedst ${timeLabel(state.weather.series[0].time[state.selIdx])}`;
-  return `${note}<div class="sectionLabel">${label} · ${list.length} strækninger</div><div class="list">${rows}</div>
+  const anim = state.animateList ? ' rise' : '';
+  state.animateList = false;
+  return `${note}<div class="sectionLabel">${label} · ${list.length} strækninger</div><div class="list${anim}">${rows}</div>
     ${list.length > 8 ? `<button class="more" data-act="all">${state.view.showAll ? 'Vis færre' : `Vis alle ${list.length}`}</button>` : ''}`;
 }
 
@@ -565,6 +579,7 @@ async function startTrip() {
   store.setActiveTrip(state.trip);
   enterTripUi();
   focus(start, 16);
+  haptic('success');
   toast('Start gemt. Pilen viser vej tilbage hertil.');
 }
 
@@ -641,7 +656,7 @@ function addFind() {
   store.setActiveTrip(t);
   addFindMarker(f);
   updateHud();
-  if (navigator.vibrate) navigator.vibrate(30);
+  haptic('success');
   toast(`Fund nr. ${t.findPts.length} gemt`, 'Fortryd', () => {
     t.findPts.pop();
     store.setActiveTrip(t);
@@ -676,6 +691,7 @@ function finishTrip() {
   leaveTripUi();
   switchTab('ture');
   renderPanel();
+  haptic('success');
   toast(`Turen er gemt · ${done.finds} fund`);
   runSync();
 }
@@ -787,9 +803,12 @@ function releaseWakeLock() { try { state.wakeLock?.release(); } catch {} state.w
 function bindUi() {
   $('timeline').addEventListener('click', (e) => {
     const b = e.target.closest('[data-i]');
-    if (!b) return;
+    if (!b || +b.dataset.i === state.selIdx) return;
     state.selIdx = +b.dataset.i;
-    renderVerdict(); renderTimeline(); colorCoast(); renderPanel();
+    $('timeline').querySelector('.sel')?.classList.remove('sel');
+    b.classList.add('sel');
+    haptic('selection');
+    renderVerdict(); colorCoast(); renderPanel();
   });
   $('btnNow').addEventListener('click', () => {
     state.selIdx = state.nowIdx;
@@ -807,8 +826,11 @@ function bindUi() {
   $('scopes').addEventListener('click', (e) => {
     const c = e.target.closest('[data-scope]');
     if (!c) return;
+    if (c.dataset.scope === state.scope) return;
     state.scope = c.dataset.scope;
     state.view.showAll = false;
+    haptic('selection');
+    state.animateList = true;
     store.setPrefs({ scope: state.scope });
     if (state.scope === 'near' && state.me) focus(state.me, 11);
     // Bornholm tæller med i Øst, men kortet zoomer på Sjælland og øerne, så de ikke bliver små
@@ -880,8 +902,10 @@ function openSpot(id) {
 
 function switchTab(tab) {
   if (state.view.tab === tab && $('sheet').dataset.state === 'peek') setSheet('mid');
+  if (state.view.tab !== tab) haptic('selection');
   state.view.tab = tab;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelector('.tabs').style.setProperty('--i', ['steder', 'ture', 'info'].indexOf(tab));
   ['steder', 'ture', 'info'].forEach((t) => { $(`tab-${t}`).hidden = t !== tab; });
 }
 
@@ -977,11 +1001,13 @@ function bindSheetDrag() {
     const h = sheetHeights();
     if (!moved) {
       const order = ['peek', 'mid', 'max'];
+      haptic('light');
       setSheet(order[(order.indexOf(sheet.dataset.state) + 1) % 3]);
       return;
     }
     const cur = sheet.offsetHeight;
     const best = Object.entries(h).reduce((a, b) => (Math.abs(b[1] - cur) < Math.abs(a[1] - cur) ? b : a))[0];
+    if (best !== sheet.dataset.state) haptic('light');
     setSheet(best);
   };
   grab.addEventListener('pointerup', end);
@@ -1028,9 +1054,11 @@ function toast(msg, actionLabel, action) {
   const el = $('toast');
   el.innerHTML = `<span>${esc(msg)}</span>${actionLabel ? `<button>${esc(actionLabel)}</button>` : ''}`;
   el.hidden = false;
-  if (action) el.querySelector('button').onclick = () => { action(); el.hidden = true; };
+  el.classList.remove('out');
+  const hide = () => { el.classList.add('out'); setTimeout(() => { if (el.classList.contains('out')) el.hidden = true; }, 260); };
+  if (action) el.querySelector('button').onclick = () => { action(); hide(); };
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, actionLabel ? 5000 : 3000);
+  toastTimer = setTimeout(hide, actionLabel ? 5000 : 3000);
 }
 
 /* ---------- Format ---------- */

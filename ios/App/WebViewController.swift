@@ -2,7 +2,7 @@ import UIKit
 import WebKit
 
 /// Viser web-appen og forbinder den med den native GPS.
-/// Web → native: window.webkit.messageHandlers.rav.postMessage({ cmd: 'ready' | 'startTrip' | 'stopTrip' })
+/// Web → native: window.webkit.messageHandlers.rav.postMessage({ cmd: 'ready' | 'startTrip' | 'stopTrip' | 'haptic', style })
 /// Native → web: window.__ravFixes([{ lat, lon, acc, t }]), window.__ravHeading(grader)
 final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     private static let appURL = URL(string: "https://kennethabrahamsson.github.io/ravjagt/?native=1")!
@@ -100,6 +100,7 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
             flushPending()
         case "startTrip": location.startTrip()
         case "stopTrip": location.stopTrip()
+        case "haptic": Haptics.play(body["style"] as? String ?? "light")
         default: break
         }
     }
@@ -139,4 +140,19 @@ private final class WeakHandler: NSObject, WKScriptMessageHandler {
     weak var target: WKScriptMessageHandler?
     init(_ target: WKScriptMessageHandler) { self.target = target }
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) { target?.userContentController(c, didReceive: m) }
+}
+
+/// Små vibrationer, som web-appen beder om: valg, tryk og "gemt"
+enum Haptics {
+    private static let selection = UISelectionFeedbackGenerator()
+    private static let notify = UINotificationFeedbackGenerator()
+
+    static func play(_ style: String) {
+        switch style {
+        case "selection": selection.selectionChanged()
+        case "success": notify.notificationOccurred(.success)
+        case "medium": UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        default: UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        }
+    }
 }
