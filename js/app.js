@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 19; // samme nummer som cachen i sw.js
+const APP_VERSION = 20; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -792,7 +792,10 @@ function sheetHeights() {
   const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
   const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight + $('scopes').offsetHeight;
   const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
-  const peek = $('grab').offsetHeight + tl + actions + safe + 2;
+  // Sammenfoldet: filter, tidslinje, knap, fanerne og toppen af listen ("Bedst lige nu" + starten af første sted)
+  const tabs = document.querySelector('.tabs').offsetHeight + 10;
+  const listPeek = 72;
+  const peek = $('grab').offsetHeight + tl + actions + tabs + listPeek + safe + 2;
   const vh = window.innerHeight + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0);
   return { peek, mid: Math.max(peek + 120, Math.round(vh * 0.5)), max: Math.round(vh * 0.86) };
 }
