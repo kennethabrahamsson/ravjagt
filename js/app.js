@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 33; // samme nummer som cachen i sw.js
+const APP_VERSION = 34; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -850,7 +850,7 @@ function bindUi() {
     store.setPrefs({ night: next });
     updateNight();
     haptic('selection');
-    toast({ auto: 'Natlys: automatisk, når det er mørkt', on: 'Natlys: altid til', off: 'Natlys: altid fra' }[next]);
+    toast({ auto: 'Dæmpet om aftenen: automatisk', on: 'Dæmpet: altid', off: 'Dæmpet: aldrig' }[next]);
   });
 }
 
@@ -1018,7 +1018,7 @@ function focus(latlng, zoom) {
   mv.focus(latlng, zoom, top, $('sheet').offsetHeight);
 }
 
-/* Natlys: rødt lys, der skåner mørkesynet. 'auto' slår det til, når det er mørkt der, hvor du er. */
+/* Natlys: dæmper hele skærmen (samme farver), så den lyser mindre om aftenen. 'auto' slår det til, når det er mørkt der, hvor du er. */
 function nightMode() {
   const v = store.prefs().night;
   return v === 'on' || v === 'off' ? v : 'auto'; // tidligere true/false → automatisk
