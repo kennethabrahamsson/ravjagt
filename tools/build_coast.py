@@ -211,11 +211,14 @@ ph = defaultdict(list)
 for p in P: ph[(int(p[0]/0.05), int(p[1]/0.08))].append(p)
 for s in segs:
     lat, lon = s['mid']; cands = []
-    for da in (-1, 0, 1):
-        for db in (-1, 0, 1):
-            for p in ph.get((int(lat/0.05)+da, int(lon/0.08)+db), []):
-                d = dist(s['mid'], (p[0], p[1]))
-                if d < 5000: cands.append((d/1000 + p[3]*0.9, p, d))
+    # Nærmeste stednavn inden for 5 km; findes intet, så inden for 15 km (navnet får afstand og retning på)
+    for reach, ring in ((5000, 1), (15000, 3)):
+        for da in range(-ring, ring+1):
+            for db in range(-ring, ring+1):
+                for p in ph.get((int(lat/0.05)+da, int(lon/0.08)+db), []):
+                    d = dist(s['mid'], (p[0], p[1]))
+                    if d < reach: cands.append((d/1000 + p[3]*0.9, p, d))
+        if cands: break
     if cands:
         _, p, d = min(cands)
         s['name'] = p[2]; s['anchor'] = (p[0], p[1])
@@ -224,8 +227,8 @@ for s in segs:
 groups = defaultdict(list)
 for s in segs: groups[s['name']].append(s)
 for name, g in groups.items():
-    if len(g) < 2: continue
     for s in g:
+        if len(g) < 2 and dist(s['mid'], s['anchor']) < 5000: continue
         d = dist(s['mid'], s['anchor'])
         if d >= 600:
             brg = bearing(s['anchor'], s['mid'])

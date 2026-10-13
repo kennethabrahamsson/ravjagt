@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 21; // samme nummer som cachen i sw.js
+const APP_VERSION = 22; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -41,6 +41,7 @@ layers[layerName].addTo(map);
 const coastLayer = L.layerGroup().addTo(map);
 const trapLayer = L.layerGroup();
 const tripLayer = L.layerGroup().addTo(map);
+const bestLayer = L.layerGroup().addTo(map);
 let meMarker = null, meCircle = null, homeLine = null, trackLine = null;
 
 /* ---------- Opstart ---------- */
@@ -269,6 +270,7 @@ const lineWeight = () => { const z = map.getZoom(); return z >= 13 ? 9 : z >= 11
 
 // Vest/Øst: kun den landsdels kyst vises. Nær mig: kysten uden for 30 km bliver grå. Hele landet: alt.
 function colorCoast() {
+  renderBest();
   const region = state.scope === 'west' ? 'v' : state.scope === 'east' ? 'o' : null;
   const near = state.scope === 'near' ? new Set(scopeSpots()) : null;
   const w = lineWeight();
@@ -281,6 +283,51 @@ function colorCoast() {
       ? { color: COLORS[levelOf(quick(spot, state.selIdx))], opacity: 0.95, weight: w }
       : { color: '#6f8086', opacity: 0.4, weight: Math.max(1.5, w / 3) });
   }
+}
+
+/* ---------- De tre bedste steder som nummererede markører ---------- */
+function move(p, brg, m) {
+  const lat = p[0] + (m * Math.cos((brg * Math.PI) / 180)) / 110574;
+  const lon = p[1] + (m * Math.sin((brg * Math.PI) / 180)) / (111320 * Math.cos((p[0] * Math.PI) / 180));
+  return [lat, lon];
+}
+// Nærmeste høfde/mole ved strækningen (beregnes én gang)
+function trapFor(spot) {
+  if (spot._trap !== undefined) return spot._trap;
+  let best = null, bd = Infinity;
+  if (spot.traps) for (const ln of state.trapLines) for (const p of ln) { const d = distance(p, spot.center); if (d < bd) { bd = d; best = ln; } }
+  return (spot._trap = best && bd < 1200 ? best : null);
+}
+// Konkret mål: ved roden af høfden på den side, strømmen samler materialet – ellers midt på strækningen
+function target(spot, r) {
+  const ln = trapFor(spot);
+  if (!ln) return { pos: spot.center, where: 'midt på strækningen' };
+  const toCoast = (p) => Math.min(...spot.line.map((q) => distance(p, q)));
+  const root = ln.reduce((a, p) => (toCoast(p) < toCoast(a) ? p : a));
+  if (Math.abs(r.f.drift) <= 20) return { pos: root, where: 'ved høfden' };
+  const side = r.f.drift > 0 ? spot.normal + 90 : spot.normal - 90;
+  return { pos: move(root, side, 40), where: `på ${compass(side, true)}siden af høfden` };
+}
+function bestSpots() {
+  const picked = [];
+  for (const it of ranked()) {
+    if (it.q < 30 || picked.length >= 3) break;
+    if (picked.some((b) => distance(b.spot.center, it.spot.center) < 3000)) continue;
+    const r = it.r;
+    picked.push({ spot: it.spot, r, ...target(it.spot, r) });
+  }
+  return picked;
+}
+function renderBest() {
+  bestLayer.clearLayers();
+  if (!state.ready) return;
+  state.best = bestSpots();
+  state.best.forEach((b, n) => {
+    L.marker(b.pos, {
+      icon: L.divIcon({ className: '', html: `<div class="bestPin ${b.r.level}">${n + 1}</div>`, iconSize: [32, 32] }),
+      title: `${n + 1}. ${b.spot.name}`, zIndexOffset: 700,
+    }).on('click', () => openSpot(b.spot.id)).addTo(bestLayer);
+  });
 }
 
 function renderPanel() {
@@ -303,7 +350,7 @@ function spotListHtml() {
   const rows = shown.map(({ spot, r, d }) => `
     <button class="spot" data-spot="${spot.id}">
       <span class="score ${r.level}">${r.score}</span>
-      <span class="spotName">${esc(spot.name)}${spot.traps ? '<span class="trapTag">høfder</span>' : ''}<small>${esc(r.reasons[0])}</small></span>
+      <span class="spotName">${(() => { const bi = (state.best || []).findIndex((b) => b.spot === spot); return bi >= 0 ? `<span class="rank">${bi + 1}</span>` : ''; })()}${esc(spot.name)}${spot.traps ? '<span class="trapTag">høfder</span>' : ''}<small>${esc(r.reasons[0])}</small></span>
       <span class="spotDist">${d != null ? distText(d) : ''}</span>
     </button>`).join('');
   const label = state.selIdx === state.nowIdx ? 'Bedst lige nu' : `Bedst ${timeLabel(state.weather.series[0].time[state.selIdx])}`;
@@ -318,11 +365,14 @@ function spotDetailHtml(id) {
   const w = wFor(spot);
   const d = state.me ? distance(state.me, spot.center) : null;
   const lows = lowTides(w).filter((x) => x >= state.nowIdx).slice(0, 2).map((x) => `ca. ${timeLabel(w.time[x], true)}`);
-  const [lat, lon] = spot.center;
+  const bi = (state.best || []).findIndex((b) => b.spot === spot);
+  const best = bi >= 0 ? state.best[bi] : null;
+  const [lat, lon] = best ? best.pos : spot.center;
   const maxFetch = Math.max(...spot.fetch);
   return `<div class="detail">
     <button class="back" data-act="back">‹ Alle steder</button>
     <div class="detailHead"><span class="score ${r.level}">${r.score}</span><div><h3>${esc(spot.name)}</h3><span class="mute">${LEVELS[r.level].label}${d != null ? ` · ${distText(d)} herfra` : ''}</span></div></div>
+    ${best ? `<div class="hint"><b>Markør ${bi + 1}</b> på kortet: gå ${esc(best.where)}.</div>` : ''}
     <ul class="reasons">${r.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
     <div class="facts">
       <div class="fact"><b>${fmt(w.ws[i])}</b><span>m/s ${compass(w.wd[i])}</span></div>
@@ -731,7 +781,8 @@ function openSpot(id) {
   if ($('sheet').dataset.state === 'peek') setSheet('mid');
   renderPanel();
   const spot = state.spots.find((s) => s.id === id);
-  focus(spot.center);
+  const best = (state.best || []).find((b) => b.spot === spot);
+  focus(best ? best.pos : spot.center, Math.max(map.getZoom(), 14)); // zoom ind, så høfden og vejen kan ses
 }
 
 function switchTab(tab) {
