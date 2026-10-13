@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 20; // samme nummer som cachen i sw.js
+const APP_VERSION = 21; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -493,7 +493,7 @@ function enterTripUi() {
   const t = state.trip;
   $('top').hidden = true;
   $('hud').hidden = false;
-  $('sheet').classList.add('trip');
+  $('sheet').classList.add('in-trip');
   setSheet('peek');
   $('actionsIdle').hidden = true;
   $('actionsTrip').hidden = false;
@@ -556,7 +556,7 @@ function addFind() {
 }
 
 function addFindMarker(f) {
-  L.marker([f[0], f[1]], { icon: L.divIcon({ className: '', html: '<div class="findPin"></div>', iconSize: [12, 12] }), interactive: false }).addTo(tripLayer);
+  L.marker([f[0], f[1]], { icon: L.divIcon({ className: '', html: '<div class="findPin"></div>', iconSize: [18, 18] }), interactive: false, zIndexOffset: 800 }).addTo(tripLayer);
 }
 
 let findsCount = 0;
@@ -603,7 +603,7 @@ function leaveTripUi() {
   $('hud').hidden = true;
   $('actionsIdle').hidden = false;
   $('actionsTrip').hidden = true;
-  $('sheet').classList.remove('trip');
+  $('sheet').classList.remove('in-trip');
   setSheet($('sheet').dataset.state);
 }
 
@@ -790,7 +790,7 @@ document.addEventListener('focusout', (e) => { if (e.target.matches('input, text
 function sheetHeights() {
   const sheet = $('sheet');
   const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
-  const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight + $('scopes').offsetHeight;
+  const tl = sheet.classList.contains('in-trip') ? 0 : $('timeline').offsetHeight + $('scopes').offsetHeight;
   const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
   // Sammenfoldet: filter, tidslinje, knap, fanerne og toppen af listen ("Bedst lige nu" + starten af første sted)
   const tabs = document.querySelector('.tabs').offsetHeight + 10;
