@@ -1,6 +1,6 @@
 import { scoreAt, levelOf, LEVELS, lowTides, MODEL_VERSION } from './model.js';
 import { loadCoast, distance, bearing } from './spots.js';
-import { loadWeather, hourKey } from './weather.js';
+import { cachedWeather, fetchWeather, hourKey } from './weather.js';
 import * as store from './store.js';
 import * as cloud from './sync.js';
 
@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 16; // samme nummer som cachen i sw.js
+const APP_VERSION = 17; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -61,7 +61,6 @@ function installDemoGps() {
 
 async function init() {
   $('modelVersion').textContent = MODEL_VERSION;
-  $('screenInfo').textContent = screenInfo();
   applyNight(store.prefs().night);
   bindUi();
   setSheet('peek');
@@ -83,23 +82,37 @@ async function init() {
   if (resumed) resumeTrip(resumed);
   startLocating();
   runSync();
-  await refreshWeather();
-  setInterval(() => refreshWeather(), 30 * 60 * 1000);
+  // Vis vejret fra sidst med det samme, og hent nyt i baggrunden
+  const cached = cachedWeather(state.points);
+  if (cached) useWeather(cached);
+  refreshWeather();
+  setInterval(() => refreshWeather(), 5 * 60 * 1000); // tjekker hvert 5. min, henter kun hvis vejret er over 30 min gammelt
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') { refreshWeather(); runSync(); if (state.trip) requestWakeLock(); }
   });
-  window.addEventListener('online', () => runSync());
+  window.addEventListener('online', () => { refreshWeather(); runSync(); });
 }
 
 async function refreshWeather(force = false) {
+  if (!force && state.weather && Date.now() - state.weather.fetchedAt < 30 * 60 * 1000) { useWeather(state.weather); return; }
+  state.weatherError = null;
+  if (state.ready) renderVerdict();
   try {
-    state.weather = await loadWeather(state.points, { force });
-  } catch {
+    useWeather(await fetchWeather(state.points));
+  } catch (err) {
+    state.weatherError = err.message;
+    if (state.ready) { renderVerdict(); return; }
+    $('vDot').className = 'dot red';
     $('vTitle').textContent = 'Kunne ikke hente vejret';
-    $('vSub').textContent = 'Tjek forbindelsen – appen prøver igen om lidt';
-    return;
+    $('vSub').innerHTML = `${esc(err.message)} · <button class="retry" id="btnRetry">Prøv igen</button>`;
+    $('btnRetry').onclick = () => { $('vTitle').textContent = 'Henter vejret …'; $('vSub').textContent = 'Et øjeblik'; refreshWeather(true); };
   }
-  const times = state.weather.series[0].time;
+}
+
+// Tag et vejrsæt i brug (fra telefonen eller nyhentet) og opdatér det hele
+function useWeather(w) {
+  state.weather = w;
+  const times = w.series[0].time;
   const idx = times.indexOf(hourKey());
   const followNow = state.selIdx === state.nowIdx || !state.ready;
   state.nowIdx = idx >= 0 ? idx : 0;
@@ -170,7 +183,8 @@ function renderVerdict() {
   bits.push(dark ? 'mørkt' : 'lyst');
   let sub = bits.join(' · ');
   if (best.r.level !== 'green' && next) sub = `Næste gode tur: ${timeLabel(w.time[next.start])} · ${sub}`;
-  if (state.weather.stale) sub = `Gammelt vejr (offline) · ${sub}`;
+  const age = Date.now() - state.weather.fetchedAt;
+  if (state.weatherError || age > 60 * 60 * 1000) sub = `Vejr fra ${clock(state.weather.fetchedAt)} – kunne ikke opdatere · ${sub}`;
   $('vSub').textContent = sub;
   $('btnNow').hidden = i === state.nowIdx;
 }
@@ -736,7 +750,7 @@ function missing() {
   const d = Math.max(screen.height - window.innerHeight, window.innerHeight - document.documentElement.clientHeight);
   return d > 10 && d < 160 ? d : 0;
 }
-let lastFix = 'ingen';
+var lastFix = 'ingen'; // var: kan læses, før linjen er kørt
 function fixViewport() {
   const root = document.documentElement;
   root.classList.toggle('standalone', isStandalone());

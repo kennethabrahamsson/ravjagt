@@ -226,3 +226,5 @@ html.standalone, html.standalone body { background: var(--panel-solid); }
 .scopeChip[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
 /* Hjemmeskærms-app: helt ensfarvet ark, så en eventuel iOS-bar i bunden glider i ét med det */
 html.standalone .sheet { background: var(--panel-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+.retry { color: var(--amber); font-weight: 700; text-decoration: underline; padding: 0; }
