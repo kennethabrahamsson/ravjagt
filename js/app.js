@@ -1,21 +1,25 @@
 import { scoreAt, levelOf, LEVELS, lowTides, MODEL_VERSION } from './model.js';
-import { loadSpots, distance, bearing } from './spots.js';
-import { loadWeather, pointFor, hourKey } from './weather.js';
+import { loadCoast, distance, bearing } from './spots.js';
+import { loadWeather, hourKey } from './weather.js';
 import * as store from './store.js';
 import * as cloud from './sync.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
+const NEAR_KM = 30;
+const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
-  spots: [], weather: null, nowIdx: 0, selIdx: 0, scores: null,
-  me: null, heading: null, view: { tab: 'steder', spot: null, showAll: false },
+  spots: [], open: [], points: [], trapLines: [], weather: null, nowIdx: 0, selIdx: 0, ready: false,
+  me: null, heading: null, scope: store.prefs().scope || 'near',
+  view: { tab: 'steder', spot: null, showAll: false },
   trip: null, watchId: null, wakeLock: null,
 };
 
 /* ---------- Kort ---------- */
-const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([56.07, 8.11], 11);
+const canvas = L.canvas({ padding: 0.3, tolerance: 8 });
+const map = L.map('map', { zoomControl: false, attributionControl: false, renderer: canvas, preferCanvas: true }).fitBounds(DK);
 L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
 const layers = {
   kort: L.layerGroup([
@@ -33,7 +37,8 @@ const layers = {
 let layerName = store.prefs().layer === 'foto' ? 'foto' : 'kort';
 layers[layerName].addTo(map);
 
-const spotLayer = L.layerGroup().addTo(map);
+const coastLayer = L.layerGroup().addTo(map);
+const trapLayer = L.layerGroup();
 const tripLayer = L.layerGroup().addTo(map);
 let meMarker = null, meCircle = null, homeLine = null, trackLine = null;
 
@@ -61,7 +66,12 @@ async function init() {
   store.askPersist();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
-  state.spots = await loadSpots();
+  const coast = await loadCoast();
+  state.spots = coast.spots;
+  state.open = coast.spots.filter((s) => s.open);
+  state.points = coast.points;
+  state.trapLines = coast.trapLines;
+  drawCoast();
   const resumed = store.activeTrip();
   if (resumed) resumeTrip(resumed);
   startLocating();
@@ -76,77 +86,111 @@ async function init() {
 
 async function refreshWeather(force = false) {
   try {
-    state.weather = await loadWeather({ force });
+    state.weather = await loadWeather(state.points, { force });
   } catch {
     $('vTitle').textContent = 'Kunne ikke hente vejret';
     $('vSub').textContent = 'Tjek forbindelsen – appen prøver igen om lidt';
     return;
   }
   const times = state.weather.series[0].time;
-  const k = hourKey();
-  const idx = times.indexOf(k);
-  const followNow = state.selIdx === state.nowIdx || !state.scores;
+  const idx = times.indexOf(hourKey());
+  const followNow = state.selIdx === state.nowIdx || !state.ready;
   state.nowIdx = idx >= 0 ? idx : 0;
   if (followNow) state.selIdx = state.nowIdx;
-  computeScores();
+  state.ready = true;
   renderAll();
 }
 
-function computeScores() {
-  const series = state.weather.series;
-  const n = series[0].time.length;
-  state.scores = state.spots.map((spot) => {
-    const w = series[pointFor(spot.center[0])];
-    const arr = new Array(n);
-    for (let i = 0; i < n; i++) arr[i] = scoreAt(w, i, spot);
-    return arr;
-  });
+/* ---------- Score (beregnes først, når den skal bruges, og huskes til vejret skifter) ---------- */
+const wFor = (spot) => state.weather.series[spot.point];
+function fresh(spot) { if (spot._sw !== state.weather) { spot._sw = state.weather; spot._s = []; spot._b = new Int16Array(state.weather.series[0].time.length).fill(-1); } }
+// Fuld vurdering med forklaringer
+function score(spot, i) { fresh(spot); return spot._s[i] || (spot._s[i] = scoreAt(wFor(spot), i, spot)); }
+// Kun tallet – til kortets farver, tidslinjen og sortering
+function quick(spot, i) { fresh(spot); if (spot._b[i] < 0) spot._b[i] = scoreAt(wFor(spot), i, spot, true); return spot._b[i]; }
+
+// Hvilke strækninger listen, tidslinjen og dommen øverst handler om
+function scopeSpots() {
+  let scope = state.scope;
+  if (scope === 'near' && !state.me) scope = 'view';
+  if (scope === 'near') {
+    const near = state.open.filter((s) => distance(state.me, s.center) < NEAR_KM * 1000);
+    if (near.length) return near;
+    scope = 'view';
+  }
+  if (scope === 'view') {
+    const b = map.getBounds();
+    const inView = state.open.filter((s) => b.contains(s.center));
+    return inView.length ? inView : state.open;
+  }
+  return state.open;
+}
+function scopeLabel() {
+  if (state.scope === 'near' && state.me && state.open.some((s) => distance(state.me, s.center) < NEAR_KM * 1000)) return `inden for ${NEAR_KM} km`;
+  if (state.scope === 'all') return 'i hele landet';
+  return 'på kortet';
 }
 
 /* ---------- Render ---------- */
 function renderAll() {
+  if (!state.ready) return;
+  state._top = topScores();
   renderVerdict();
   renderTimeline();
-  renderMap();
+  colorCoast();
   renderPanel();
   setSheet($('sheet').dataset.state); // tidslinjen giver det sammenfoldede ark sin højde
 }
+const renderScope = debounce(() => { if (!state.ready) return; state._top = topScores(); renderVerdict(); renderTimeline(); if (!state.view.spot) $('tab-steder').innerHTML = spotListHtml(); }, 250);
 
+// Sorteret efter score; forklaringerne (r) hentes først for de rækker, der vises
 function ranked(i = state.selIdx) {
-  return state.spots
-    .map((spot, k) => ({ spot, r: state.scores[k][i], d: state.me ? distance(state.me, spot.center) : null }))
-    .sort((a, b) => b.r.score - a.r.score || (a.d ?? 0) - (b.d ?? 0));
+  return scopeSpots()
+    .map((spot) => ({ spot, q: quick(spot, i), d: state.me ? distance(state.me, spot.center) : null, get r() { return score(spot, i); } }))
+    .sort((a, b) => b.q - a.q || (a.d ?? 0) - (b.d ?? 0));
 }
 
 function renderVerdict() {
   const best = ranked()[0];
+  if (!best) return;
   const i = state.selIdx;
-  const w = state.weather.series[pointFor(best.spot.center[0])];
+  const w = wFor(best.spot);
   const dark = w.isDay[i] === 0;
   $('vDot').className = `dot ${best.r.level}`;
   const when = i === state.nowIdx ? 'Lige nu' : timeLabel(w.time[i]);
-  $('vTitle').textContent = `${when}: ${LEVELS[best.r.level].label.toLowerCase()}`;
+  $('vTitle').textContent = `${when}: ${LEVELS[best.r.level].label.toLowerCase()} ${scopeLabel()}`;
   const next = nextWindow();
   const bits = [];
-  bits.push(`${windText(w.ws[i], w.wd[i])}`);
-  if (w.wave[i] != null) bits.push(`bølger ${fmt(w.wave[i])} m`);
+  if (best.r.level === 'green') bits.push(`Bedst: ${best.spot.name}`);
+  bits.push(windText(w.ws[i], w.wd[i]));
   bits.push(dark ? 'mørkt' : 'lyst');
   let sub = bits.join(' · ');
-  if (best.r.level !== 'green' && next) sub = `Næste gode tur: ${timeLabel(state.weather.series[0].time[next.start])} · ${sub}`;
+  if (best.r.level !== 'green' && next) sub = `Næste gode tur: ${timeLabel(w.time[next.start])} · ${sub}`;
   if (state.weather.stale) sub = `Gammelt vejr (offline) · ${sub}`;
   $('vSub').textContent = sub;
   $('btnNow').hidden = i === state.nowIdx;
 }
 
-// Første sammenhængende grønne vindue fra nu, helst i mørke
-function nextWindow() {
+function topScores() {
+  const spots = scopeSpots();
   const n = state.weather.series[0].time.length;
-  const isDay = state.weather.series[0].isDay;
+  const start = Math.max(0, state.nowIdx - 6);
+  const top = new Array(n).fill(0);
+  for (let i = start; i < n; i++) {
+    let m = 0;
+    for (const s of spots) { const v = quick(s, i); if (v > m) m = v; }
+    top[i] = m;
+  }
+  return top;
+}
+
+// Første sammenhængende grønne vindue fra nu
+function nextWindow(top = state._top) {
+  if (!top) return null;
   let best = null;
-  for (let i = state.nowIdx; i < n; i++) {
-    const top = Math.max(...state.scores.map((s) => s[i].score));
-    if (levelOf(top) === 'green') {
-      if (!best) best = { start: i, end: i, dark: isDay[i] === 0 };
+  for (let i = state.nowIdx; i < top.length; i++) {
+    if (levelOf(top[i]) === 'green') {
+      if (!best) best = { start: i, end: i };
       else if (i === best.end + 1) best.end = i;
       else break;
     }
@@ -159,6 +203,7 @@ function renderTimeline() {
   const s0 = state.weather.series[0];
   const n = s0.time.length;
   const start = Math.max(0, state.nowIdx - 6);
+  const top = state._top || (state._top = topScores());
   const groups = new Map();
   for (let i = start; i < n; i++) {
     const day = s0.time[i].slice(0, 10);
@@ -171,11 +216,9 @@ function renderTimeline() {
     const isToday = day === s0.time[state.nowIdx].slice(0, 10);
     html.push(`<div class="day"><div class="dayLabel">${isToday ? '<b>I dag</b>' : `${DAYS[d.getDay()]} ${d.getDate()}.`}</div><div class="hours">`);
     for (const i of idxs) {
-      const top = Math.max(...state.scores.map((s) => s[i].score));
-      const lvl = levelOf(top);
-      const h = Math.max(10, top);
+      const lvl = levelOf(top[i]);
       const cls = ['h', lvl, s0.isDay[i] === 0 ? 'dark' : '', i === state.selIdx ? 'sel' : '', i < state.nowIdx ? 'past' : ''].join(' ');
-      html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}"><i style="height:${h}%"></i></button>`);
+      html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}"><i style="height:${Math.max(10, top[i])}%"></i></button>`);
     }
     html.push('</div></div>');
   }
@@ -184,24 +227,29 @@ function renderTimeline() {
   if (sel && !el.dataset.scrolled) { sel.scrollIntoView({ inline: 'start', block: 'nearest' }); el.dataset.scrolled = '1'; }
 }
 
-function renderMap() {
-  spotLayer.clearLayers();
-  const zones = state.spots.filter((s) => s.kind === 'zone');
-  L.polyline(zones.map((s) => s.line), { color: '#000', weight: 15, opacity: 0.4, interactive: false }).addTo(spotLayer);
-  state.spots.forEach((spot, k) => {
-    const r = state.scores[k][state.selIdx];
-    const color = COLORS[r.level];
-    if (spot.kind === 'zone') {
-      L.polyline(spot.line, { color, weight: 9, opacity: 0.95, lineCap: 'butt' })
-        .on('click', () => openSpot(spot.id)).addTo(spotLayer);
+/* Kysten tegnes én gang; farverne skiftes, når tidspunktet skifter */
+function drawCoast() {
+  coastLayer.clearLayers();
+  for (const spot of state.spots) {
+    if (spot.open) {
+      spot.layer = L.polyline(spot.line, { color: '#5b6b70', weight: lineWeight(), opacity: 0.95, lineCap: 'butt' })
+        .on('click', () => openSpot(spot.id)).addTo(coastLayer);
     } else {
-      spot.lines.forEach((ln) => L.polyline(ln, { color, weight: 3, opacity: 0.9, interactive: false }).addTo(spotLayer));
-      L.marker(spot.center, {
-        icon: L.divIcon({ className: '', html: `<div class="trapPin" style="color:${color}"></div>`, iconSize: [22, 22] }),
-        title: spot.name,
-      }).on('click', () => openSpot(spot.id)).addTo(spotLayer);
+      L.polyline(spot.line, { color: '#6f8086', weight: 1.2, opacity: 0.35, interactive: false }).addTo(coastLayer);
     }
+  }
+  for (const ln of state.trapLines) L.polyline(ln, { color: '#e8eef0', weight: 2, opacity: 0.8, interactive: false }).addTo(trapLayer);
+  map.on('zoomend', () => {
+    const w = lineWeight();
+    for (const s of state.open) s.layer.setStyle({ weight: w });
+    if (map.getZoom() >= 13) trapLayer.addTo(map); else map.removeLayer(trapLayer);
   });
+  map.on('moveend', () => { if (state.scope === 'view' || (state.scope === 'near' && !state.me)) renderScope(); });
+}
+const lineWeight = () => { const z = map.getZoom(); return z >= 13 ? 9 : z >= 11 ? 7 : z >= 9 ? 5 : 3; };
+
+function colorCoast() {
+  for (const spot of state.open) spot.layer.setStyle({ color: COLORS[levelOf(quick(spot, state.selIdx))] });
 }
 
 function renderPanel() {
@@ -209,44 +257,53 @@ function renderPanel() {
   $('tab-ture').innerHTML = tripsHtml();
 }
 
+function scopeChips() {
+  const chip = (key, label) => `<button class="scopeChip" data-scope="${key}" aria-pressed="${state.scope === key}">${label}</button>`;
+  return `<div class="scopes">${chip('near', `Nær mig`)}${chip('view', 'Kortudsnit')}${chip('all', 'Hele landet')}</div>`;
+}
+
 function spotListHtml() {
-  if (!state.scores) return '<p class="empty">Henter vejret …</p>';
+  if (!state.ready) return '<p class="empty">Henter vejret …</p>';
+  let note = '';
+  if (state.scope === 'near' && !state.me) note = '<p class="mute small">Venter på din position – viser kortudsnittet så længe.</p>';
+  else if (state.scope === 'near' && !state.open.some((s) => distance(state.me, s.center) < NEAR_KM * 1000)) note = `<p class="mute small">Ingen ravkyst inden for ${NEAR_KM} km – viser kortudsnittet.</p>`;
   const list = ranked();
-  const shown = state.view.showAll ? list : list.slice(0, 6);
+  const shown = state.view.showAll ? list : list.slice(0, 8);
   const rows = shown.map(({ spot, r, d }) => `
     <button class="spot" data-spot="${spot.id}">
       <span class="score ${r.level}">${r.score}</span>
-      <span class="spotName">${esc(spot.name)}${spot.kind === 'trap' ? '<span class="trapTag">fælde</span>' : ''}<small>${esc(r.reasons[0])}</small></span>
+      <span class="spotName">${esc(spot.name)}${spot.traps ? '<span class="trapTag">høfder</span>' : ''}<small>${esc(r.reasons[0])}</small></span>
       <span class="spotDist">${d != null ? distText(d) : ''}</span>
     </button>`).join('');
   const label = state.selIdx === state.nowIdx ? 'Bedst lige nu' : `Bedst ${timeLabel(state.weather.series[0].time[state.selIdx])}`;
-  return `<div class="sectionLabel">${label}</div><div class="list">${rows}</div>
-    ${list.length > 6 ? `<button class="more" data-act="all">${state.view.showAll ? 'Vis færre' : `Vis alle ${list.length} steder`}</button>` : ''}`;
+  return `${scopeChips()}${note}<div class="sectionLabel">${label} · ${list.length} strækninger</div><div class="list">${rows}</div>
+    ${list.length > 8 ? `<button class="more" data-act="all">${state.view.showAll ? 'Vis færre' : `Vis alle ${list.length}`}</button>` : ''}`;
 }
 
 function spotDetailHtml(id) {
-  const k = state.spots.findIndex((s) => s.id === id);
-  const spot = state.spots[k];
+  const spot = state.spots.find((s) => s.id === id);
   const i = state.selIdx;
-  const r = state.scores[k][i];
-  const w = state.weather.series[pointFor(spot.center[0])];
+  const r = score(spot, i);
+  const w = wFor(spot);
   const d = state.me ? distance(state.me, spot.center) : null;
   const lows = lowTides(w).filter((x) => x >= state.nowIdx).slice(0, 2).map((x) => `ca. ${timeLabel(w.time[x], true)}`);
   const [lat, lon] = spot.center;
+  const maxFetch = Math.max(...spot.fetch);
   return `<div class="detail">
     <button class="back" data-act="back">‹ Alle steder</button>
     <div class="detailHead"><span class="score ${r.level}">${r.score}</span><div><h3>${esc(spot.name)}</h3><span class="mute">${LEVELS[r.level].label}${d != null ? ` · ${distText(d)} herfra` : ''}</span></div></div>
     <ul class="reasons">${r.reasons.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-    ${spot.hint ? `<div class="hint">${esc(spot.hint)}</div>` : ''}
     <div class="facts">
       <div class="fact"><b>${fmt(w.ws[i])}</b><span>m/s ${compass(w.wd[i])}</span></div>
       <div class="fact"><b>${w.wave[i] != null ? fmt(w.wave[i]) : '–'}</b><span>m bølger</span></div>
       <div class="fact"><b>${w.sl[i] != null ? fmt(w.sl[i] * 100, 0) : '–'}</b><span>cm vandstand</span></div>
     </div>
-    ${lows.length ? `<p class="mute">Lavvande ${lows.join(' og ')} (model)</p>` : ''}
+    <p class="mute">Kysten vender mod ${compass(spot.normal, true)} med ${maxFetch >= 250 ? 'åbent hav' : `op til ${maxFetch} km åbent vand`} foran.${lows.length ? ` Lavvande ${lows.join(' og ')} (model).` : ''}</p>
     <a class="linkbtn" href="https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d" target="_blank" rel="noopener">Vis vej i Kort</a>
   </div>`;
 }
+
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 function tripsHtml() {
   const all = store.trips();
@@ -349,8 +406,9 @@ function onPosition(pos) {
   }
   if (firstFix) {
     firstFix = false;
-    if (!state.trip && distance(state.me, [56.07, 8.11]) < 30000) map.setView(state.me, 13);
-    if (state.scores && !state.view.spot) $('tab-steder').innerHTML = spotListHtml();
+    // Er du i Danmark, starter kortet ved dig
+    if (!state.trip && L.latLngBounds(DK).pad(0.1).contains(state.me)) focus(state.me, 11);
+    if (state.ready) renderScope();
   }
   if (state.trip) {
     onTripPosition(pos);
@@ -369,15 +427,15 @@ async function startTrip() {
   if (!pos) { toast('Slå placering til for Safari for at kunne starte en tur'); return; }
   const start = [pos.coords.latitude, pos.coords.longitude];
   const i = state.nowIdx;
-  const nearest = state.spots.filter((s) => s.kind === 'zone').reduce((a, b) => (distance(a.center, start) < distance(b.center, start) ? a : b));
-  const k = state.spots.indexOf(nearest);
-  const w = state.weather?.series[pointFor(start[0])];
+  const nearest = (state.open.length ? state.open : state.spots).reduce((a, b) => (distance(a.center, start) < distance(b.center, start) ? a : b));
+  const r = state.ready ? score(nearest, i) : null;
+  const w = state.ready ? wFor(nearest) : null;
   state.trip = {
     id: `t${Date.now()}`, startedAt: new Date().toISOString(), start, startAcc: Math.round(pos.coords.accuracy),
     track: [[...start.map((x) => +x.toFixed(6)), Date.now()]], findPts: [],
-    model: state.scores ? {
+    model: r ? {
       version: MODEL_VERSION, hour: w.time[i], spotId: nearest.id, spotName: nearest.name,
-      score: state.scores[k][i].score, level: state.scores[k][i].level, f: state.scores[k][i].f,
+      score: r.score, level: r.level, f: r.f,
       wx: { ws: w.ws[i], wd: w.wd[i], gust: w.gust[i], wave: w.wave[i], sl: w.sl[i], isDay: w.isDay[i], temp: w.temp[i] },
     } : null,
   };
@@ -551,7 +609,7 @@ function bindUi() {
     const b = e.target.closest('[data-i]');
     if (!b) return;
     state.selIdx = +b.dataset.i;
-    renderVerdict(); renderTimeline(); renderMap(); renderPanel();
+    renderVerdict(); renderTimeline(); colorCoast(); renderPanel();
   });
   $('btnNow').addEventListener('click', () => {
     state.selIdx = state.nowIdx;
@@ -565,6 +623,17 @@ function bindUi() {
     if (!a) return;
     if (a.dataset.act === 'back') { state.view.spot = null; renderPanel(); }
     if (a.dataset.act === 'all') { state.view.showAll = !state.view.showAll; renderPanel(); }
+  });
+  $('tab-steder').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-scope]');
+    if (!c) return;
+    state.scope = c.dataset.scope;
+    state.view.showAll = false;
+    store.setPrefs({ scope: state.scope });
+    if (state.scope === 'near' && state.me) focus(state.me, 11);
+    if (state.scope === 'all') map.fitBounds(DK);
+    state._top = topScores();
+    renderVerdict(); renderTimeline(); renderPanel();
   });
   $('tab-ture').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]');
