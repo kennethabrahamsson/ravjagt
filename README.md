@@ -10,7 +10,7 @@ Privat web-app til telefonen: hvor og hvornår der er rav på stranden mellem Hv
 - **+ Fund her** sætter et fund på kortet. Ved afslutning: antal, UV ja/nej, note.
 - **Rammer modellen?** viser fund pr. time fordelt på grøn/gul/rød, så vi kan se, om farverne passer.
 - Virker offline med det seneste vejr. Din position forlader aldrig telefonen, ud over de ture du selv gemmer.
-- **Gemt i skyen:** turene synkroniseres til det private repo `kennethabrahamsson/ravjagt-data` (én fil pr. tur i `trips/`). Ændringer lægges i kø, når der ikke er net, og sendes senere. Telefonen bruger en fine-grained GitHub-nøgle med adgang til netop det repo, og den gemmes kun på telefonen.
+- **Gemt i Airtable:** turene synkroniseres til tabellen `Ture` i den private Airtable-base `Ravjagt` – én række pr. tur med læsbare kolonner (start, fund, UV, note, sted, farve, score, vind, bølger, vandstand, mørke) og det fulde spor i `Data`. Fund, UV-lygte og note kan rettes i Airtable og hentes tilbage. Ændringer lægges i kø uden net. Appen opretter selv tabellen; telefonen bruger et personligt Airtable-token med adgang til netop den base, og det gemmes kun på telefonen.
 
 ## Modellen (v0.2 – en hypotese)
 

@@ -285,28 +285,27 @@ async function runSync() {
   state.syncing = false;
   state.syncResult = r;
   $('tab-ture').innerHTML = tripsHtml();
-  if (r.ok && r.added) toast(`${r.added} ${r.added === 1 ? 'tur' : 'ture'} hentet fra skyen`);
+  if (r.ok && r.added) toast(`${r.added} ${r.added === 1 ? 'tur' : 'ture'} hentet fra Airtable`);
 }
 
 function syncHtml() {
   if (state.view.syncSetup) {
     return `<div class="syncCard">
-      <strong>Gem turene i skyen</strong>
-      <p class="mute">Turene gemmes i dit private GitHub-repo <b>ravjagt-data</b>. Lav en nøgle, der kun har adgang til det repo:</p>
+      <strong>Gem turene i Airtable</strong>
+      <p class="mute">To ting i Airtable, så klarer appen resten:</p>
       <ol class="steps">
-        <li>Åbn <a href="https://github.com/settings/personal-access-tokens/new?name=Ravjagt%20telefon&description=Synk%20af%20ture&expires_in=366&contents=write" target="_blank" rel="noopener">ny nøgle på GitHub</a>.</li>
-        <li>Under <b>Repository access</b>: vælg <b>Only select repositories</b> → <b>ravjagt-data</b>.</li>
-        <li>Tjek at <b>Contents</b> står til <b>Read and write</b>. Tryk <b>Generate token</b> og kopiér nøglen.</li>
+        <li>Lav en tom base, der hedder <b>Ravjagt</b>.</li>
+        <li>Åbn <a href="https://airtable.com/create/tokens" target="_blank" rel="noopener">Airtable → Builder hub → Personal access tokens</a> og opret en nøgle med disse fire rettigheder: <b>data.records:read</b>, <b>data.records:write</b>, <b>schema.bases:read</b> og <b>schema.bases:write</b>. Under <b>Access</b> vælger du basen <b>Ravjagt</b>. Kopiér nøglen.</li>
       </ol>
       <label class="field"><span>Indsæt nøglen her</span>
-        <input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…"></label>
+        <input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="pat…"></label>
       ${state.view.syncError ? `<p class="danger">${esc(state.view.syncError)}</p>` : ''}
       <div class="row"><button class="ghost" data-act="sync-cancel">Annullér</button><button class="primary" data-act="sync-save">Forbind</button></div>
-      <p class="mute small">Nøglen gemmes kun på denne telefon. Den kan kun læse og skrive i ravjagt-data.</p>
+      <p class="mute small">Appen opretter selv tabellen "Ture". Nøglen gemmes kun på denne telefon.</p>
     </div>`;
   }
   if (!cloud.isSetUp()) {
-    return `<button class="syncCard off" data-act="sync-setup"><strong>Turene ligger kun på telefonen</strong><span class="mute">Tryk for at gemme dem i skyen</span></button>`;
+    return `<button class="syncCard off" data-act="sync-setup"><strong>Turene ligger kun på telefonen</strong><span class="mute">Tryk for at gemme dem i Airtable</span></button>`;
   }
   const c = cloud.config();
   const waiting = store.outbox().length;
@@ -314,10 +313,10 @@ function syncHtml() {
   if (state.syncing) line = 'Synkroniserer …';
   else if (state.syncResult && !state.syncResult.ok) line = `Ikke synket: ${state.syncResult.msg || 'ingen forbindelse'}${waiting ? ` · ${waiting} venter` : ''}`;
   else if (waiting) line = `${waiting} ${waiting === 1 ? 'ændring venter' : 'ændringer venter'} på net`;
-  else line = c.lastSync ? `Synket ${clock(c.lastSync)} · ${c.remoteCount ?? 0} ture i skyen` : 'Klar';
+  else line = c.lastSync ? `Synket ${clock(c.lastSync)} · ${c.remoteCount ?? 0} ture i Airtable` : 'Klar';
   const ok = !waiting && (!state.syncResult || state.syncResult.ok);
   return `<div class="syncCard ${ok ? 'on' : 'warn2'}">
-    <div><strong>${ok ? 'Gemt i skyen' : 'Synkronisering'}</strong><span class="mute">${esc(line)}</span></div>
+    <div><strong>${ok ? 'Gemt i Airtable' : 'Synkronisering'}</strong><span class="mute">${esc(line)}</span></div>
     <button class="syncNow" data-act="sync-now" ${state.syncing ? 'disabled' : ''}>Synk nu</button>
   </div>`;
 }
@@ -644,7 +643,7 @@ async function connectSync() {
   const r = await cloud.setUp(token);
   if (!r.ok) { state.view.syncError = r.msg; $('tab-ture').innerHTML = tripsHtml(); return; }
   state.view.syncSetup = false;
-  toast('Forbundet – dine ture gemmes nu i skyen');
+  toast(`Forbundet til ${r.baseName} – dine ture gemmes nu i Airtable`);
   runSync();
 }
 

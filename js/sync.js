@@ -1,63 +1,106 @@
-// Synkronisering af ture til et privat GitHub-repo: én fil pr. tur i trips/<id>.json.
-// Nøglen (et fine-grained token med adgang til netop det repo) indtastes på telefonen
+// Synkronisering af ture til Airtable: én række pr. tur i tabellen "Ture" i basen "Ravjagt".
+// Nøglen (et personligt Airtable-token med adgang til netop den base) indtastes på telefonen
 // og gemmes kun dér. Ændringer lægges i en udbakke og sendes, når der er net.
+// Fund, UV-lygte og note kan rettes i Airtable og hentes tilbage til appen.
 
 import * as store from './store.js';
 
-export const REPO = 'kennethabrahamsson/ravjagt-data';
-const API = `https://api.github.com/repos/${REPO}`;
-const CONF = 'ravjagt.sync.v1';
-const SHAS = 'ravjagt.shas.v1'; // id → sha for ture, der ligger i skyen
+const API = 'https://api.airtable.com/v0';
+const TABLE = 'Ture';
+const CONF = 'ravjagt.airtable.v1';
+const RECS = 'ravjagt.records.v1'; // tur-id → Airtable-række-id
 
 const read = (k, f) => { try { return JSON.parse(localStorage.getItem(k)) ?? f; } catch { return f; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
 export const config = () => read(CONF, null);
-export const isSetUp = () => !!config()?.token;
-export function forget() { localStorage.removeItem(CONF); localStorage.removeItem(SHAS); }
+export const isSetUp = () => !!(config()?.token && config()?.baseId);
+export function forget() { localStorage.removeItem(CONF); localStorage.removeItem(RECS); }
 
-const shas = () => read(SHAS, {});
-const setSha = (id, sha) => { const m = shas(); if (sha) m[id] = sha; else delete m[id]; write(SHAS, m); };
+const recs = () => read(RECS, {});
+const setRec = (id, rec) => { const m = recs(); if (rec) m[id] = rec; else delete m[id]; write(RECS, m); };
 
-async function gh(path, { method = 'GET', body, raw = false } = {}) {
-  const token = config()?.token;
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function at(path, { method = 'GET', body, token = config()?.token } = {}) {
   const res = await fetch(`${API}${path}`, {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
+    headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
     cache: 'no-store',
   });
+  if (res.status === 429) { await pause(31000); return at(path, { method, body, token }); } // Airtables loft: 5 kald/sek
   return res;
 }
 
-const b64 = (str) => {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-};
+/* ---------- Tabellen ---------- */
+const DT = { dateFormat: { name: 'european' }, timeFormat: { name: '24hour' }, timeZone: 'Europe/Copenhagen' };
+const NUM = (precision) => ({ type: 'number', options: { precision } });
+const FIELDS = [
+  { name: 'Tur', type: 'singleLineText' },
+  { name: 'Start', type: 'dateTime', options: DT },
+  { name: 'Minutter', ...NUM(0) },
+  { name: 'Fund', ...NUM(0) },
+  { name: 'UV-lygte', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
+  { name: 'Note', type: 'multilineText' },
+  { name: 'Sted', type: 'singleLineText' },
+  { name: 'Farve', type: 'singleSelect', options: { choices: [{ name: 'Grøn', color: 'greenBright' }, { name: 'Gul', color: 'yellowBright' }, { name: 'Rød', color: 'redBright' }] } },
+  { name: 'Score', ...NUM(0) },
+  { name: 'Vind (m/s)', ...NUM(1) },
+  { name: 'Vindretning (°)', ...NUM(0) },
+  { name: 'Bølger (m)', ...NUM(1) },
+  { name: 'Vandstand (cm)', ...NUM(0) },
+  { name: 'Mørkt', type: 'checkbox', options: { icon: 'check', color: 'grayBright' } },
+  { name: 'Gået (m)', ...NUM(0) },
+  { name: 'Slut', type: 'dateTime', options: DT },
+  { name: 'Startpunkt', type: 'singleLineText' },
+  { name: 'Modelversion', type: 'singleLineText' },
+  { name: 'Tur-id', type: 'singleLineText' },
+  { name: 'Data', type: 'multilineText' },
+];
 
-// Tjekker nøglen, før den gemmes
-export async function setUp(token) {
-  write(CONF, { token: token.trim() });
-  let res;
-  try { res = await gh(''); } catch { forget(); return { ok: false, msg: 'Ingen forbindelse. Prøv igen, når du har net.' }; }
-  if (res.status === 200) {
-    const repo = await res.json();
-    if (!repo.permissions?.push) { forget(); return { ok: false, msg: 'Nøglen kan læse, men ikke skrive. Giv den "Contents: Read and write".' }; }
-    return { ok: true };
+async function ensureTable(baseId, token) {
+  const res = await at(`/meta/bases/${baseId}/tables`, { token });
+  if (!res.ok) throw new Error(res.status === 403 ? 'Nøglen har ikke adgang til basens tabeller.' : `Airtable svarede ${res.status}.`);
+  const { tables } = await res.json();
+  const table = tables.find((t) => t.name === TABLE);
+  if (!table) {
+    const c = await at(`/meta/bases/${baseId}/tables`, { method: 'POST', token, body: { name: TABLE, description: 'Ture fra Ravjagt-appen', fields: FIELDS } });
+    if (!c.ok) {
+      const err = await c.json().catch(() => ({}));
+      throw new Error(c.status === 403 ? 'Giv nøglen rettigheden "schema.bases:write".' : `Airtable: ${err?.error?.message || c.status}`);
+    }
+    return;
   }
-  forget();
-  if (res.status === 401) return { ok: false, msg: 'Nøglen virker ikke. Tjek, at du har kopieret hele nøglen.' };
-  if (res.status === 404) return { ok: false, msg: 'Nøglen har ikke adgang til ravjagt-data. Vælg repoet under "Repository access".' };
-  return { ok: false, msg: `GitHub svarede ${res.status}. Prøv igen.` };
+  const have = new Set(table.fields.map((f) => f.name));
+  for (const f of FIELDS) {
+    if (have.has(f.name)) continue;
+    await at(`/meta/bases/${baseId}/tables/${table.id}/fields`, { method: 'POST', token, body: f });
+    await pause(250);
+  }
 }
 
+// Finder basen "Ravjagt", opretter tabellen og gemmer nøglen
+export async function setUp(rawToken) {
+  const token = rawToken.trim();
+  let res;
+  try { res = await at('/meta/bases', { token }); } catch { return { ok: false, msg: 'Ingen forbindelse. Prøv igen, når du har net.' }; }
+  if (res.status === 401) return { ok: false, msg: 'Nøglen virker ikke. Tjek, at du har kopieret hele nøglen.' };
+  if (res.status === 403) return { ok: false, msg: 'Nøglen mangler rettigheden "schema.bases:read".' };
+  if (!res.ok) return { ok: false, msg: `Airtable svarede ${res.status}. Prøv igen.` };
+  const { bases } = await res.json();
+  const base = bases.find((b) => /ravjagt/i.test(b.name)) || (bases.length === 1 ? bases[0] : null);
+  if (!base) {
+    return { ok: false, msg: bases.length ? 'Nøglen har ikke adgang til en base, der hedder "Ravjagt". Tilføj den under "Access".' : 'Nøglen har ikke adgang til nogen base. Tilføj basen "Ravjagt" under "Access".' };
+  }
+  try { await ensureTable(base.id, token); } catch (e) {
+    return { ok: false, msg: `Kunne ikke oprette tabellen "Ture". ${e.message}` };
+  }
+  write(CONF, { token, baseId: base.id, baseName: base.name });
+  return { ok: true, baseName: base.name };
+}
+
+/* ---------- Synk ---------- */
 let running = null;
 export function sync() {
   if (!isSetUp()) return Promise.resolve({ ok: false, reason: 'not-set-up' });
@@ -68,79 +111,140 @@ export function sync() {
 async function doSync() {
   try {
     // Ture fra før synkroniseringen kom på, sendes op første gang
-    const known = shas();
+    const known = recs();
     const queued = new Set(store.outbox().map((x) => x.id));
     for (const t of store.trips()) if (!known[t.id] && !queued.has(t.id)) store.setOutbox([...store.outbox(), { op: 'put', id: t.id }]);
 
     await flushOutbox();
     const pulled = await pull();
-    const now = Date.now();
-    write(CONF, { ...config(), lastSync: now, remoteCount: pulled.remoteCount });
+    write(CONF, { ...config(), lastSync: Date.now(), remoteCount: pulled.remoteCount });
     return { ok: true, ...pulled };
   } catch (err) {
-    write(CONF, { ...config(), lastError: String(err.message || err), lastErrorAt: Date.now() });
-    return { ok: false, reason: 'error', msg: String(err.message || err) };
+    return { ok: false, reason: 'error', msg: friendly(err) };
   }
 }
+
+const friendly = (err) => {
+  const m = String(err?.message || err);
+  if (/Failed to fetch|NetworkError|Load failed|offline/i.test(m)) return 'ingen forbindelse';
+  if (/401/.test(m)) return 'nøglen virker ikke længere – forbind igen';
+  if (/403|404/.test(m)) return 'nøglen har ikke adgang til basen – forbind igen';
+  return m;
+};
 
 async function flushOutbox() {
   for (const item of [...store.outbox()]) {
     if (item.op === 'put') await pushTrip(item.id);
     else await removeTrip(item.id);
     store.setOutbox(store.outbox().filter((x) => !(x.id === item.id && x.op === item.op)));
+    await pause(220);
   }
+}
+
+const base = () => `/${config().baseId}/${encodeURIComponent(TABLE)}`;
+const LEVEL = { green: 'Grøn', yellow: 'Gul', red: 'Rød' };
+const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
+
+function toFields(t) {
+  const d = new Date(t.startedAt);
+  const m = t.model || {};
+  const wx = m.wx || {};
+  // Airtable tillader 100.000 tegn i et felt: tynd sporet ud, hvis turen er meget lang
+  let trip = t;
+  let json = JSON.stringify(trip);
+  for (let step = 2; json.length > 95000 && step < 64; step *= 2) {
+    trip = { ...t, track: t.track.filter((_, i) => i % step === 0 || i === t.track.length - 1) };
+    json = JSON.stringify(trip);
+  }
+  return {
+    Tur: `${DAYS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1} kl. ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}${m.spotName ? ` · ${m.spotName}` : ''}`,
+    Start: t.startedAt,
+    Slut: t.endedAt || null,
+    Minutter: t.durationMin ?? null,
+    Fund: t.finds ?? 0,
+    'UV-lygte': !!t.uv,
+    Note: t.note || '',
+    Sted: m.spotName || '',
+    Farve: LEVEL[m.level] || null,
+    Score: m.score ?? null,
+    'Vind (m/s)': wx.ws ?? null,
+    'Vindretning (°)': wx.wd ?? null,
+    'Bølger (m)': wx.wave ?? null,
+    'Vandstand (cm)': wx.sl != null ? Math.round(wx.sl * 100) : null,
+    Mørkt: wx.isDay === 0,
+    'Gået (m)': t.walkedM ?? null,
+    Startpunkt: t.start ? `${t.start[0]}, ${t.start[1]}` : '',
+    Modelversion: m.version || '',
+    'Tur-id': t.id,
+    Data: json,
+  };
+}
+
+function fromRecord(r) {
+  const f = r.fields || {};
+  let t;
+  try { t = JSON.parse(f.Data); } catch { return null; }
+  if (!t?.id) return null;
+  // Det, man kan rette i Airtable, vinder over appens kopi
+  if (typeof f.Fund === 'number') t.finds = f.Fund;
+  t.uv = !!f['UV-lygte'];
+  t.note = f.Note || '';
+  return t;
 }
 
 async function pushTrip(id) {
   const trip = store.trips().find((t) => t.id === id);
   if (!trip) return;
-  const path = `/contents/trips/${id}.json`;
-  const body = (sha) => ({ message: `Tur ${trip.startedAt.slice(0, 16).replace('T', ' ')} · ${trip.finds} fund`, content: b64(JSON.stringify(trip, null, 1)), ...(sha ? { sha } : {}) });
-  let res = await gh(path, { method: 'PUT', body: body(shas()[id]) });
-  if (res.status === 409 || res.status === 422) {
-    // Filen findes allerede med en anden version: hent den aktuelle og prøv igen
-    const cur = await gh(path);
-    const sha = cur.ok ? (await cur.json()).sha : undefined;
-    res = await gh(path, { method: 'PUT', body: body(sha) });
+  const fields = toFields(trip);
+  const rec = recs()[id];
+  let res = rec
+    ? await at(`${base()}/${rec}`, { method: 'PATCH', body: { fields, typecast: true } })
+    : await at(base(), { method: 'POST', body: { records: [{ fields }], typecast: true } });
+  if (rec && res.status === 404) {
+    // Rækken er slettet i Airtable i mellemtiden: opret den igen
+    res = await at(base(), { method: 'POST', body: { records: [{ fields }], typecast: true } });
   }
   if (!res.ok) throw new Error(`Kunne ikke gemme tur (${res.status})`);
-  setSha(id, (await res.json()).content.sha);
+  const body = await res.json();
+  setRec(id, body.records ? body.records[0].id : body.id);
 }
 
 async function removeTrip(id) {
-  const path = `/contents/trips/${id}.json`;
-  let sha = shas()[id];
-  if (!sha) {
-    const cur = await gh(path);
-    if (cur.status === 404) return;
-    sha = (await cur.json()).sha;
-  }
-  const res = await gh(path, { method: 'DELETE', body: { message: `Slet tur ${id}`, sha } });
+  const rec = recs()[id];
+  if (!rec) return;
+  const res = await at(`${base()}/${rec}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 404) throw new Error(`Kunne ikke slette tur (${res.status})`);
-  setSha(id, null);
+  setRec(id, null);
 }
 
 async function pull() {
-  const res = await gh('/contents/trips');
-  const list = res.status === 404 ? [] : res.ok ? await res.json() : null;
-  if (!list) throw new Error(`Kunne ikke hente ture (${res.status})`);
-  const remote = new Map(list.filter((f) => f.name.endsWith('.json')).map((f) => [f.name.slice(0, -5), f.sha]));
+  const remote = new Map();
+  let offset;
+  do {
+    const q = new URLSearchParams({ pageSize: '100' });
+    if (offset) q.set('offset', offset);
+    const res = await at(`${base()}?${q}`);
+    if (!res.ok) throw new Error(`Kunne ikke hente ture (${res.status})`);
+    const body = await res.json();
+    for (const r of body.records) {
+      const t = fromRecord(r);
+      if (t) remote.set(t.id, { rec: r.id, trip: t });
+    }
+    offset = body.offset;
+  } while (offset);
+
   const local = new Map(store.trips().map((t) => [t.id, t]));
   const pending = new Set(store.outbox().map((x) => x.id));
   let added = 0, removed = 0;
-
-  for (const [id, sha] of remote) {
+  for (const [id, { rec, trip }] of remote) {
     if (pending.has(id)) continue;
-    if (local.has(id) && shas()[id] === sha) continue;
-    const r = await gh(`/contents/trips/${id}.json`, { raw: true });
-    if (!r.ok) continue;
-    store.syncLocal.put(await r.json());
-    setSha(id, sha);
     if (!local.has(id)) added++;
+    store.syncLocal.put(trip);
+    setRec(id, rec);
   }
-  // Slettet på en anden enhed: tidligere synket, nu væk fra skyen
+  // Slettet i Airtable eller på en anden enhed: tidligere synket, nu væk
   for (const id of local.keys()) {
-    if (!remote.has(id) && shas()[id] && !pending.has(id)) { store.syncLocal.remove(id); setSha(id, null); removed++; }
+    if (!remote.has(id) && recs()[id] && !pending.has(id)) { store.syncLocal.remove(id); setRec(id, null); removed++; }
   }
   return { added, removed, remoteCount: remote.size };
 }
