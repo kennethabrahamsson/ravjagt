@@ -132,6 +132,11 @@ export function createMap(el, { onSpotClick, onDragStart } = {}) {
     getZoom: () => map.getZoom(),
     resize: () => map.resize(),
 
+    /** Natlys: luftfotoet dæmpes kraftigt, så skærmen lyser mindst muligt */
+    setNight(on) {
+      ready.then(() => map.setPaintProperty('foto', 'raster-brightness-max', on ? 0.4 : 0.8));
+    },
+
     /** Kort eller luftfoto */
     setLayer(name) {
       ready.then(() => {

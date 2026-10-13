@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 32; // samme nummer som cachen i sw.js
+const APP_VERSION = 33; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -90,7 +90,7 @@ function installDemoGps() {
 
 async function init() {
   $('modelVersion').textContent = MODEL_VERSION;
-  applyNight(store.prefs().night);
+  updateNight();
   bindUi();
   setSheet('peek');
   store.askPersist();
@@ -154,6 +154,7 @@ function useWeather(w) {
   if (followNow) state.selIdx = state.nowIdx;
   state.ready = true;
   renderAll();
+  updateNight();
 }
 
 /* ---------- Score (beregnes først, når den skal bruges, og huskes til vejret skifter) ---------- */
@@ -844,9 +845,12 @@ function bindUi() {
     haptic('selection');
   });
   $('btnNight').addEventListener('click', () => {
-    const on = !document.body.classList.contains('night');
-    applyNight(on);
-    store.setPrefs({ night: on });
+    const order = ['auto', 'on', 'off'];
+    const next = order[(order.indexOf(nightMode()) + 1) % 3];
+    store.setPrefs({ night: next });
+    updateNight();
+    haptic('selection');
+    toast({ auto: 'Natlys: automatisk, når det er mørkt', on: 'Natlys: altid til', off: 'Natlys: altid fra' }[next]);
   });
 }
 
@@ -1014,9 +1018,26 @@ function focus(latlng, zoom) {
   mv.focus(latlng, zoom, top, $('sheet').offsetHeight);
 }
 
-function applyNight(on) {
+/* Natlys: rødt lys, der skåner mørkesynet. 'auto' slår det til, når det er mørkt der, hvor du er. */
+function nightMode() {
+  const v = store.prefs().night;
+  return v === 'on' || v === 'off' ? v : 'auto'; // tidligere true/false → automatisk
+}
+function isDarkNow() {
+  if (!state.weather) return false;
+  const pt = state.me && state.points.length
+    ? state.points.reduce((b, p, k) => (distance(state.me, [p[0], p[1]]) < distance(state.me, [state.points[b][0], state.points[b][1]]) ? k : b), 0)
+    : 0;
+  return state.weather.series[pt]?.isDay[state.nowIdx] === 0;
+}
+function updateNight() {
+  const mode = nightMode();
+  const on = mode === 'on' || (mode === 'auto' && isDarkNow());
   document.body.classList.toggle('night', on);
   $('btnNight').setAttribute('aria-pressed', String(on));
+  $('btnNight').dataset.mode = mode;
+  $('btnNight').setAttribute('aria-label', `Natlys: ${{ auto: 'automatisk', on: 'altid til', off: 'altid fra' }[mode]}`);
+  mv.setNight(on);
 }
 
 async function connectSync() {

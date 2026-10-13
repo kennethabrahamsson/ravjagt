@@ -579,3 +579,8 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 .slideLabel { position: absolute; left: 64px; right: 52px; text-align: center; padding: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chev { right: 20px; }
 @media (max-width: 380px) { .scopeChip { font-size: 12.5px; } .slideLabel { font-size: 15px; } }
+
+/* Natlys-knappen: lille A, når den står på automatisk */
+#btnNight { position: relative; }
+#btnNight[data-mode="auto"]::after { content: "A"; position: absolute; right: 6px; bottom: 5px; font: 700 9px/1 var(--sans); color: var(--mute); }
+#btnNight[data-mode="auto"][aria-pressed="true"]::after { color: var(--amber); }
