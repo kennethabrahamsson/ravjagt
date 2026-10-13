@@ -61,5 +61,7 @@ python3 -m http.server 8765
 
 ## Næste skridt
 
+- **Revler (parkeret 13.10.2026):** Danmarks Dybdemodel (Geodatastyrelsen, 50 m) viser ikke revlerne – nær kysten er den mest interpoleret mellem Kystdirektoratets profiler med ca. 1 km mellemrum. DHI's DK-Dybdemodel (10 m, satellitbaseret) ville vise dem, men er kommerciel. Tages op igen, hvis turene i Airtable viser, at fundene følger afstanden til kysten.
+
 - Kalibrér modellen på egne ture + Open-Meteo-arkivet.
 - Udvid til flere kyster (fx Skallingen, Blåvandshuk, Thyborøn).
