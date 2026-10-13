@@ -4,7 +4,7 @@ import WebKit
 /// Viser web-appen og forbinder den med den native GPS.
 /// Web → native: window.webkit.messageHandlers.rav.postMessage({ cmd: 'ready' | 'startTrip' | 'stopTrip' | 'haptic', style })
 /// Native → web: window.__ravFixes([{ lat, lon, acc, t }]), window.__ravHeading(grader)
-final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
+final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate {
     private static let appURL = URL(string: "https://kennethabrahamsson.github.io/ravjagt/?native=1")!
     private static let appHost = "kennethabrahamsson.github.io"
 
@@ -32,6 +32,11 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.bounces = false
         webView.allowsBackForwardNavigationGestures = false
+        // Ingen zoom af selve siden – kortet zoomer med sine egne fingerbevægelser
+        webView.scrollView.minimumZoomScale = 1
+        webView.scrollView.maximumZoomScale = 1
+        webView.scrollView.pinchGestureRecognizer?.isEnabled = false
+        webView.scrollView.delegate = self
         view = webView
 
         offline.text = "Ingen forbindelse første gang appen åbnes.\nTryk for at prøve igen."
@@ -89,6 +94,9 @@ final class WebViewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard webReady, let data = try? JSONEncoder().encode(fixes), let json = String(data: data, encoding: .utf8) else { return }
         webView.evaluateJavaScript("window.__ravFixes && window.__ravFixes(\(json))")
     }
+
+    // Siden må ikke zoomes
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { nil }
 
     // MARK: Beskeder fra web-appen
 

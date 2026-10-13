@@ -539,3 +539,6 @@ dialog h2 { font: 500 26px var(--display); letter-spacing: -0.02em; }
   .top { background: var(--ink); }
   .sheet, .hud { background: var(--panel-solid); }
 }
+
+/* Siden må ikke zoome (dobbelttryk eller knib) – kun kortet zoomer */
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

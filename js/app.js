@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 28; // samme nummer som cachen i sw.js
+const APP_VERSION = 29; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -44,6 +44,16 @@ const trapLayer = L.layerGroup();
 const tripLayer = L.layerGroup().addTo(map);
 const bestLayer = L.layerGroup().addTo(map);
 let meMarker = null, meCircle = null, homeLine = null, trackLine = null, trackGlow = null;
+
+/* Siden må ikke zoome som et website (Safari ignorerer user-scalable=no); kortet håndterer selv sine fingre */
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  if (e.target.closest('#map')) return;
+  const now = Date.now();
+  if (now - lastTouchEnd < 300) e.preventDefault(); // ingen dobbelttryk-zoom uden for kortet
+  lastTouchEnd = now;
+}, { passive: false });
 
 /* ---------- Opstart ---------- */
 // Inde i den native iPhone-app kommer GPS'en fra appen – også i baggrunden under en tur
