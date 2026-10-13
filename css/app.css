@@ -94,7 +94,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   height: var(--sheet-h, 45vh); display: flex; flex-direction: column;
   background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--line); border-radius: 22px 22px 0 0;
-  padding: 0 16px max(var(--safe-b), 14px); transition: height 0.3s ease; overflow: hidden;
+  padding: 0 16px calc(max(var(--safe-b), 14px) + 16px); transition: height 0.3s ease; overflow: hidden;
 }
 .sheet.dragging, .sheet.dragging ~ .fabs { transition: none; }
 .sheet.trip .timeline { display: none; }
