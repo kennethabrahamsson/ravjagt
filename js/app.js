@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 34; // samme nummer som cachen i sw.js
+const APP_VERSION = 35; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -845,7 +845,7 @@ function bindUi() {
     haptic('selection');
   });
   $('btnNight').addEventListener('click', () => {
-    const order = ['auto', 'on', 'off'];
+    const order = ['off', 'auto', 'on'];
     const next = order[(order.indexOf(nightMode()) + 1) % 3];
     store.setPrefs({ night: next });
     updateNight();
@@ -1021,7 +1021,7 @@ function focus(latlng, zoom) {
 /* Natlys: dæmper hele skærmen (samme farver), så den lyser mindre om aftenen. 'auto' slår det til, når det er mørkt der, hvor du er. */
 function nightMode() {
   const v = store.prefs().night;
-  return v === 'on' || v === 'off' ? v : 'auto'; // tidligere true/false → automatisk
+  return v === 'on' || v === 'auto' ? v : 'off'; // fra som udgangspunkt (Kenneth, 13.10.2026)
 }
 function isDarkNow() {
   if (!state.weather) return false;
