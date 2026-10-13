@@ -8,6 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
+const APP_VERSION = 15; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -65,7 +66,12 @@ async function init() {
   bindUi();
   setSheet('peek');
   store.askPersist();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
+    // Når en ny version tager over, genindlæses appen én gang, så du ikke kører med blandede filer
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded && !state.trip) { reloaded = true; location.reload(); } });
+  }
 
   const coast = await loadCoast();
   state.spots = coast.spots;
@@ -741,7 +747,7 @@ function fixViewport() {
 }
 function screenInfo() {
   const sa = (side) => { const el = document.createElement('div'); el.style.cssText = `position:fixed;visibility:hidden;height:env(safe-area-inset-${side})`; document.body.append(el); const h = el.offsetHeight; el.remove(); return h; };
-  return `Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse ${shortfall()} · ${isStandalone() ? 'hjemmeskærm' : 'browser'}`;
+  return `App v${APP_VERSION} · Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse ${shortfall()} · ${isStandalone() ? 'hjemmeskærm' : 'browser'}`;
 }
 fixViewport();
 for (const ev of ['resize', 'orientationchange', 'pageshow']) window.addEventListener(ev, () => setTimeout(fixViewport, 100));

@@ -1,5 +1,5 @@
 // Offline: appen selv caches ved installation, kortfliser og vejr caches undervejs.
-const VERSION = 'ravjagt-v14';
+const VERSION = 'ravjagt-v15';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/model.js', 'js/spots.js', 'js/weather.js', 'js/store.js', 'js/sync.js',
   'data/dk.json', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'manifest.webmanifest',
@@ -33,9 +33,10 @@ self.addEventListener('fetch', (e) => {
   // Vejr håndteres af appen selv (localStorage), så den går altid til nettet
   if (/open-meteo\.com/.test(url.host)) return;
 
-  // Appen: net først, så du altid får den nyeste version, cache når du er offline
+  // Appen: net først og altid spørg serveren (no-cache), så en ny version når frem med det samme.
+  // Uden net bruges den gemte kopi.
   if (url.origin === self.location.origin) {
-    e.respondWith(fetch(e.request).then((res) => {
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone();
       caches.open(VERSION).then((c) => c.put(e.request, copy));
       return res;
