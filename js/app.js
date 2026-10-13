@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 15; // samme nummer som cachen i sw.js
+const APP_VERSION = 16; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -730,24 +730,40 @@ function switchTab(tab) {
    tegner iOS en solid bjælke. Vi måler netop den forskel, gør dokumentet lige så højt som vinduet og
    flytter kort og ark ned med forskellen. Uden forskel gør vi ingenting. */
 function isStandalone() { return !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches); }
-function shortfall() {
-  if (!isStandalone()) return 0;
-  const d = window.innerHeight - document.documentElement.clientHeight;
+// Hvor meget vinduet mangler i forhold til skærmen (iOS-fejlen: ca. statuslinjens højde)
+function missing() {
+  if (!isStandalone() || window.innerWidth > window.innerHeight) return 0;
+  const d = Math.max(screen.height - window.innerHeight, window.innerHeight - document.documentElement.clientHeight);
   return d > 10 && d < 160 ? d : 0;
 }
+let lastFix = 'ingen';
 function fixViewport() {
   const root = document.documentElement;
   root.classList.toggle('standalone', isStandalone());
-  const d = shortfall();
-  root.style.setProperty('--gap', `${d}px`);
-  root.style.height = d ? `${window.innerHeight}px` : '';
+  root.style.height = '';
+  root.style.setProperty('--gap', '0px');
+  let d = missing();
+  if (d) {
+    // 1) Få iOS til at måle forfra: skjul og vis siden i samme øjeblik (kendt rettelse af fejlen)
+    document.body.style.display = 'none';
+    void document.body.offsetHeight;
+    document.body.style.display = '';
+    const after = missing();
+    lastFix = after ? `målt forfra uden effekt, flytter ${after}` : `målt forfra – vinduet er nu ${window.innerHeight}`;
+    d = after;
+  } else lastFix = 'ingen nødvendig';
+  // 2) Mangler der stadig noget: gør siden lige så høj som skærmen og flyt kort og ark ned
+  if (d) {
+    root.style.height = `${window.innerHeight + d}px`;
+    root.style.setProperty('--gap', `${d}px`);
+  }
   if (typeof map !== 'undefined') map.invalidateSize();
   if ($('sheet').dataset.state) setSheet($('sheet').dataset.state);
   if ($('screenInfo')) $('screenInfo').textContent = screenInfo();
 }
 function screenInfo() {
   const sa = (side) => { const el = document.createElement('div'); el.style.cssText = `position:fixed;visibility:hidden;height:env(safe-area-inset-${side})`; document.body.append(el); const h = el.offsetHeight; el.remove(); return h; };
-  return `App v${APP_VERSION} · Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse ${shortfall()} · ${isStandalone() ? 'hjemmeskærm' : 'browser'}`;
+  return `App v${APP_VERSION} · Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse: ${lastFix} · ${isStandalone() ? 'hjemmeskærm' : 'browser'}`;
 }
 fixViewport();
 for (const ev of ['resize', 'orientationchange', 'pageshow']) window.addEventListener(ev, () => setTimeout(fixViewport, 100));
@@ -761,7 +777,7 @@ function sheetHeights() {
   const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight + $('scopes').offsetHeight;
   const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
   const peek = $('grab').offsetHeight + tl + actions + safe + 2;
-  const vh = window.innerHeight;
+  const vh = window.innerHeight + (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0);
   return { peek, mid: Math.max(peek + 120, Math.round(vh * 0.5)), max: Math.round(vh * 0.86) };
 }
 
