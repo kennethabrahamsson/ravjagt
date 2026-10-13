@@ -28,7 +28,6 @@
     </div>
     <button class="now" id="btnNow" hidden>Nu</button>
   </div>
-  <div class="timeline" id="timeline" aria-label="Vælg tidspunkt"></div>
 </header>
 
 <div class="hud" id="hud" hidden>
@@ -57,8 +56,9 @@
   </button>
 </div>
 
-<section class="sheet" id="sheet" data-state="mid">
-  <button class="grab" id="grab" aria-label="Vis mere eller mindre"><span></span></button>
+<section class="sheet" id="sheet" data-state="peek">
+  <button class="grab" id="grab" aria-label="Træk op for at se mere"><span></span></button>
+  <div class="timeline" id="timeline" aria-label="Vælg tidspunkt"></div>
 
   <div class="actions" id="actionsIdle">
     <button id="btnStart" class="primary">

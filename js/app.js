@@ -15,7 +15,8 @@ const state = {
 };
 
 /* ---------- Kort ---------- */
-const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([56.07, 8.11], 11);
+const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([56.07, 8.11], 11);
+L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
 const layers = {
   kort: L.layerGroup([
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -56,7 +57,7 @@ async function init() {
   $('modelVersion').textContent = MODEL_VERSION;
   applyNight(store.prefs().night);
   bindUi();
-  setSheet('mid');
+  setSheet('peek');
   store.askPersist();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
@@ -108,6 +109,7 @@ function renderAll() {
   renderTimeline();
   renderMap();
   renderPanel();
+  setSheet($('sheet').dataset.state); // tidslinjen giver det sammenfoldede ark sin højde
 }
 
 function ranked(i = state.selIdx) {
@@ -353,7 +355,7 @@ function onPosition(pos) {
   if (state.trip) {
     onTripPosition(pos);
     // Kortet følger dig på turen, medmindre du selv har flyttet det inden for det sidste halve minut
-    if (Date.now() - lastPan > 30000) map.panTo(state.me, { animate: true });
+    if (Date.now() - lastPan > 30000) focus(state.me);
   }
 }
 
@@ -381,7 +383,7 @@ async function startTrip() {
   };
   store.setActiveTrip(state.trip);
   enterTripUi();
-  map.setView(start, 16);
+  focus(start, 16);
   toast('Start gemt. Pilen viser vej tilbage hertil.');
 }
 
@@ -394,6 +396,8 @@ function enterTripUi() {
   const t = state.trip;
   $('top').hidden = true;
   $('hud').hidden = false;
+  $('sheet').classList.add('trip');
+  setSheet('peek');
   $('actionsIdle').hidden = true;
   $('actionsTrip').hidden = false;
   tripLayer.clearLayers();
@@ -502,6 +506,8 @@ function leaveTripUi() {
   $('hud').hidden = true;
   $('actionsIdle').hidden = false;
   $('actionsTrip').hidden = true;
+  $('sheet').classList.remove('trip');
+  setSheet($('sheet').dataset.state);
 }
 
 const walked = (track) => track.reduce((s, p, i) => (i ? s + distance([track[i - 1][0], track[i - 1][1]], [p[0], p[1]]) : 0), 0);
@@ -579,7 +585,7 @@ function bindUi() {
     $('tab-ture').innerHTML = tripsHtml();
   });
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
-  $('grab').addEventListener('click', () => setSheet($('sheet').dataset.state === 'min' ? 'mid' : $('sheet').dataset.state === 'mid' ? 'max' : 'min'));
+  bindSheetDrag();
   $('btnStart').addEventListener('click', startTrip);
   $('btnFind').addEventListener('click', addFind);
   $('btnEnd').addEventListener('click', openEnd);
@@ -592,7 +598,7 @@ function bindUi() {
   });
   $('btnLocate').addEventListener('click', () => {
     lastPan = 0;
-    if (state.me) map.setView(state.me, Math.max(map.getZoom(), 15));
+    if (state.me) focus(state.me, Math.max(map.getZoom(), 15));
     else toast('Venter på din position – tillad placering for Safari');
     askCompass();
   });
@@ -612,22 +618,81 @@ function bindUi() {
 function openSpot(id) {
   state.view.spot = id;
   switchTab('steder');
-  if ($('sheet').dataset.state === 'min') setSheet('mid');
+  if ($('sheet').dataset.state === 'peek') setSheet('mid');
   renderPanel();
   const spot = state.spots.find((s) => s.id === id);
-  map.panTo(spot.center);
+  focus(spot.center);
 }
 
 function switchTab(tab) {
+  if (state.view.tab === tab && $('sheet').dataset.state === 'peek') setSheet('mid');
   state.view.tab = tab;
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   ['steder', 'ture', 'info'].forEach((t) => { $(`tab-${t}`).hidden = t !== tab; });
 }
 
+/* Bundarket: sammenfoldet (tidslinje + knap), halvt eller næsten helt op. Træk eller tryk. */
+function sheetHeights() {
+  const sheet = $('sheet');
+  const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
+  const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight;
+  const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
+  const peek = $('grab').offsetHeight + tl + actions + safe + 2;
+  const vh = window.innerHeight;
+  return { peek, mid: Math.max(peek + 120, Math.round(vh * 0.5)), max: Math.round(vh * 0.86) };
+}
+
+function setSheetPx(px) {
+  $('sheet').style.height = `${px}px`;
+  document.documentElement.style.setProperty('--sheet-h', `${px}px`);
+}
+
 function setSheet(s) {
-  const h = { min: '168px', mid: '44vh', max: '78vh' }[s];
   $('sheet').dataset.state = s;
-  document.documentElement.style.setProperty('--sheet-h', `calc(${h} + env(safe-area-inset-bottom, 0px))`);
+  setSheetPx(sheetHeights()[s]);
+}
+
+function bindSheetDrag() {
+  const grab = $('grab');
+  const sheet = $('sheet');
+  let startY = 0, startH = 0, moved = false, dragging = false;
+  grab.addEventListener('pointerdown', (e) => {
+    dragging = true; moved = false; startY = e.clientY; startH = sheet.offsetHeight;
+    grab.setPointerCapture(e.pointerId);
+    sheet.classList.add('dragging');
+  });
+  grab.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const dy = e.clientY - startY;
+    if (Math.abs(dy) > 6) moved = true;
+    const h = sheetHeights();
+    setSheetPx(Math.min(h.max, Math.max(h.peek, startH - dy)));
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    sheet.classList.remove('dragging');
+    const h = sheetHeights();
+    if (!moved) {
+      const order = ['peek', 'mid', 'max'];
+      setSheet(order[(order.indexOf(sheet.dataset.state) + 1) % 3]);
+      return;
+    }
+    const cur = sheet.offsetHeight;
+    const best = Object.entries(h).reduce((a, b) => (Math.abs(b[1] - cur) < Math.abs(a[1] - cur) ? b : a))[0];
+    setSheet(best);
+  };
+  grab.addEventListener('pointerup', end);
+  grab.addEventListener('pointercancel', end);
+  window.addEventListener('resize', () => setSheet(sheet.dataset.state));
+}
+
+// Centrér et punkt i den synlige del af kortet (mellem toplinjen og bundarket)
+function focus(latlng, zoom) {
+  const top = ($('hud').hidden ? $('top') : $('hud')).getBoundingClientRect().bottom;
+  const sheetH = $('sheet').offsetHeight;
+  map.setView(latlng, zoom ?? map.getZoom(), { animate: false });
+  map.panBy([0, Math.round((sheetH - top) / 2)], { animate: false });
 }
 
 function applyNight(on) {
