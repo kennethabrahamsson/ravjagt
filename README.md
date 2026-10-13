@@ -5,7 +5,7 @@ Privat web-app til telefonen: hvor og hvornår der er rav på Danmarks kyster �
 ## Hvad den gør
 
 - **Hele Danmarks kyst** i strækninger på ca. 1,5 km. Kun *ravkyst* farves grøn/gul/rød: strækninger med mindst 50 km åbent vand i mindst to retninger ud fra stranden. Fjorde, bugter og havne vises som tynde grå linjer. Høfder og moler ved ravkyst vises fra zoom 13.
-- **Filter:** *Nær mig* (30 km), *Vest* (Jylland med Fanø, Rømø, Læsø og Als), *Øst* (Sjælland, Fyn, Lolland-Falster, Møn, Bornholm) eller *Kortet* styrer listen, tidslinjen, "næste gode tur" og dommen øverst.
+- **Filter:** *Nær mig* (30 km), *Vest* (Jylland med Fanø, Rømø, Læsø og Als), *Øst* (Sjælland, Fyn, Lolland-Falster, Møn) eller *Hele landet* (inkl. Bornholm). Vest og Øst viser kun den landsdels kyst; filteret styrer også tidslinjen, "næste gode tur", listen og dommen øverst.
 - **Tidslinje** for de næste 5 døgn. Tryk på en time for at se kortet på det tidspunkt. Mørke timer er markeret (UV-lygten virker kun i mørke).
 - **Start tur her** sætter en nål, hvor du starter. En pil og en afstand viser vej tilbage, også når alt ligner hinanden i mørke. Skærmen holdes tændt.
 - **+ Fund her** sætter et fund på kortet. Ved afslutning: antal, UV ja/nej, note.

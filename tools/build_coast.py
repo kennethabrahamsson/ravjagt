@@ -83,6 +83,7 @@ def region(line):
     # Øst = Sjælland, Fyn, Lolland-Falster, Møn, Bornholm og de andre øer.
     if dist(line[0], line[-1]) > 5: return 'v'
     lat = sum(p[0] for p in line) / len(line); lon = sum(p[1] for p in line) / len(line)
+    if lon > 14.4: return 'b'  # Bornholm og Ertholmene: egen landsdel, kun med under "Hele landet"
     return 'v' if lon < 10.0 or lat > 56.6 else 'o'
 
 for line in lines:

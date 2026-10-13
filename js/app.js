@@ -12,7 +12,7 @@ const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
   spots: [], open: [], points: [], trapLines: [], weather: null, nowIdx: 0, selIdx: 0, ready: false,
-  me: null, heading: null, scope: ['near', 'west', 'east', 'view'].includes(store.prefs().scope) ? store.prefs().scope : 'near',
+  me: null, heading: null, scope: ['near', 'west', 'east', 'all'].includes(store.prefs().scope) ? store.prefs().scope : 'near',
   view: { tab: 'steder', spot: null, showAll: false },
   trip: null, watchId: null, wakeLock: null,
 };
@@ -113,26 +113,18 @@ function quick(spot, i) { fresh(spot); if (spot._b[i] < 0) spot._b[i] = scoreAt(
 
 // Hvilke strækninger listen, tidslinjen og dommen øverst handler om
 function scopeSpots() {
-  let scope = state.scope;
-  if (scope === 'near' && !state.me) scope = 'view';
-  if (scope === 'near') {
+  if (state.scope === 'west' || state.scope === 'east') { const r = state.scope === 'west' ? 'v' : 'o'; return state.open.filter((s) => s.region === r); }
+  if (state.scope === 'near' && state.me) {
     const near = state.open.filter((s) => distance(state.me, s.center) < NEAR_KM * 1000);
     if (near.length) return near;
-    scope = 'view';
   }
-  if (scope === 'west' || scope === 'east') { const r = scope === 'west' ? 'v' : 'o'; return state.open.filter((s) => s.region === r); }
-  if (scope === 'view') {
-    const b = map.getBounds();
-    const inView = state.open.filter((s) => b.contains(s.center));
-    return inView.length ? inView : state.open;
-  }
-  return state.open;
+  return state.open; // hele landet – også når Nær mig mangler position eller ravkyst
 }
 function scopeLabel() {
   if (state.scope === 'near' && state.me && state.open.some((s) => distance(state.me, s.center) < NEAR_KM * 1000)) return `inden for ${NEAR_KM} km`;
   if (state.scope === 'west') return 'i Vest';
   if (state.scope === 'east') return 'i Øst';
-  return 'på kortet';
+  return 'i hele landet';
 }
 
 /* ---------- Render ---------- */
@@ -242,7 +234,7 @@ function drawCoast() {
       spot.layer = L.polyline(spot.line, { color: '#5b6b70', weight: lineWeight(), opacity: 0.95, lineCap: 'butt' })
         .on('click', () => openSpot(spot.id)).addTo(coastLayer);
     } else {
-      L.polyline(spot.line, { color: '#6f8086', weight: 1.2, opacity: 0.35, interactive: false }).addTo(coastLayer);
+      spot.layer = L.polyline(spot.line, { color: '#6f8086', weight: 1.2, opacity: 0.35, interactive: false }).addTo(coastLayer);
     }
   }
   for (const ln of state.trapLines) L.polyline(ln, { color: '#e8eef0', weight: 2, opacity: 0.8, interactive: false }).addTo(trapLayer);
@@ -251,16 +243,19 @@ function drawCoast() {
     for (const s of state.open) s.layer.setStyle({ weight: s._in === false ? Math.max(1.5, w / 3) : w });
     if (map.getZoom() >= 13) trapLayer.addTo(map); else map.removeLayer(trapLayer);
   });
-  map.on('moveend', () => { if (state.scope === 'view' || (state.scope === 'near' && !state.me)) renderScope(); });
 }
 const lineWeight = () => { const z = map.getZoom(); return z >= 13 ? 9 : z >= 11 ? 7 : z >= 9 ? 5 : 3; };
 
-// Kun kysten i det valgte filter får farve; resten bliver tynde grå streger
+// Vest/Øst: kun den landsdels kyst vises. Nær mig: kysten uden for 30 km bliver grå. Hele landet: alt.
 function colorCoast() {
-  const inScope = state.scope === 'view' ? null : new Set(scopeSpots());
+  const region = state.scope === 'west' ? 'v' : state.scope === 'east' ? 'o' : null;
+  const near = state.scope === 'near' ? new Set(scopeSpots()) : null;
   const w = lineWeight();
-  for (const spot of state.open) {
-    spot._in = !inScope || inScope.has(spot);
+  for (const spot of state.spots) {
+    const show = !region || spot.region === region;
+    if (show !== coastLayer.hasLayer(spot.layer)) show ? coastLayer.addLayer(spot.layer) : coastLayer.removeLayer(spot.layer);
+    if (!spot.open || !show) continue;
+    spot._in = !near || near.has(spot);
     spot.layer.setStyle(spot._in
       ? { color: COLORS[levelOf(quick(spot, state.selIdx))], opacity: 0.95, weight: w }
       : { color: '#6f8086', opacity: 0.4, weight: Math.max(1.5, w / 3) });
@@ -274,14 +269,14 @@ function renderPanel() {
 
 function scopeChips() {
   const chip = (key, label) => `<button class="scopeChip" data-scope="${key}" aria-pressed="${state.scope === key}">${label}</button>`;
-  return `${chip('near', 'Nær mig')}${chip('west', 'Vest')}${chip('east', 'Øst')}${chip('view', 'Kortet')}`;
+  return `${chip('near', 'Nær mig')}${chip('west', 'Vest')}${chip('east', 'Øst')}${chip('all', 'Hele landet')}`;
 }
 
 function spotListHtml() {
   if (!state.ready) return '<p class="empty">Henter vejret …</p>';
   let note = '';
-  if (state.scope === 'near' && !state.me) note = '<p class="mute small">Venter på din position – viser kortudsnittet så længe.</p>';
-  else if (state.scope === 'near' && !state.open.some((s) => distance(state.me, s.center) < NEAR_KM * 1000)) note = `<p class="mute small">Ingen ravkyst inden for ${NEAR_KM} km – viser kortudsnittet.</p>`;
+  if (state.scope === 'near' && !state.me) note = '<p class="mute small">Venter på din position – viser hele landet så længe.</p>';
+  else if (state.scope === 'near' && !state.open.some((s) => distance(state.me, s.center) < NEAR_KM * 1000)) note = `<p class="mute small">Ingen ravkyst inden for ${NEAR_KM} km – viser hele landet.</p>`;
   const list = ranked();
   const shown = state.view.showAll ? list : list.slice(0, 8);
   const rows = shown.map(({ spot, r, d }) => `
@@ -655,7 +650,8 @@ function bindUi() {
     store.setPrefs({ scope: state.scope });
     if (state.scope === 'near' && state.me) focus(state.me, 11);
     // Bornholm tæller med i Øst, men kortet zoomer på Sjælland og øerne, så de ikke bliver små
-    if (state.scope === 'west' || state.scope === 'east') fitSpots(scopeSpots().filter((x) => x.center[1] < 13.5));
+    if (state.scope === 'west' || state.scope === 'east') fitSpots(scopeSpots());
+    if (state.scope === 'all') fitSpots(state.open);
     state._top = topScores();
     renderScopes(); renderVerdict(); renderTimeline(); colorCoast(); renderPanel();
   });
