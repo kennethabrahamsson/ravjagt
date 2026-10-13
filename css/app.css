@@ -553,3 +553,17 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 .maplibregl-canvas { outline: none; }
 .maplibregl-marker { will-change: transform; }
 .startPin { transform: rotate(-45deg); margin-bottom: 4px; }
+
+/* Mere luft i bundarket og en roligere rav (okt. 2026) */
+:root { --rav: linear-gradient(180deg, #ffc23d 0%, #ffb02a 100%); }
+.grab { padding: 10px 0 12px; }
+.scopes { margin: 0 0 16px; }
+.timeline { padding-bottom: 18px; }
+.actions { padding-bottom: 18px; gap: 12px; }
+.tabs { margin-bottom: 18px; }
+.sectionLabel { margin: 2px 0 6px; }
+.sheet { padding-left: 18px; padding-right: 18px; }
+.timeline { margin: 0 -18px; padding-inline: 18px; }
+.primary { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px rgba(255, 170, 40, 0.22); }
+.knob { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(255, 170, 40, 0.3); }
+.scopes .thumb { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 3px 10px rgba(255, 170, 40, 0.2); }
