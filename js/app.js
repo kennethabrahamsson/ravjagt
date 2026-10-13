@@ -248,15 +248,23 @@ function drawCoast() {
   for (const ln of state.trapLines) L.polyline(ln, { color: '#e8eef0', weight: 2, opacity: 0.8, interactive: false }).addTo(trapLayer);
   map.on('zoomend', () => {
     const w = lineWeight();
-    for (const s of state.open) s.layer.setStyle({ weight: w });
+    for (const s of state.open) s.layer.setStyle({ weight: s._in === false ? Math.max(1.5, w / 3) : w });
     if (map.getZoom() >= 13) trapLayer.addTo(map); else map.removeLayer(trapLayer);
   });
   map.on('moveend', () => { if (state.scope === 'view' || (state.scope === 'near' && !state.me)) renderScope(); });
 }
 const lineWeight = () => { const z = map.getZoom(); return z >= 13 ? 9 : z >= 11 ? 7 : z >= 9 ? 5 : 3; };
 
+// Kun kysten i det valgte filter får farve; resten bliver tynde grå streger
 function colorCoast() {
-  for (const spot of state.open) spot.layer.setStyle({ color: COLORS[levelOf(quick(spot, state.selIdx))] });
+  const inScope = state.scope === 'view' ? null : new Set(scopeSpots());
+  const w = lineWeight();
+  for (const spot of state.open) {
+    spot._in = !inScope || inScope.has(spot);
+    spot.layer.setStyle(spot._in
+      ? { color: COLORS[levelOf(quick(spot, state.selIdx))], opacity: 0.95, weight: w }
+      : { color: '#6f8086', opacity: 0.4, weight: Math.max(1.5, w / 3) });
+  }
 }
 
 function renderPanel() {
@@ -423,7 +431,7 @@ function onPosition(pos) {
     firstFix = false;
     // Er du i Danmark, starter kortet ved dig
     if (!state.trip && L.latLngBounds(DK).pad(0.1).contains(state.me)) focus(state.me, 11);
-    if (state.ready) renderScope();
+    if (state.ready) { renderScope(); if (state.scope === 'near') colorCoast(); }
   }
   if (state.trip) {
     onTripPosition(pos);
@@ -649,7 +657,7 @@ function bindUi() {
     // Bornholm tæller med i Øst, men kortet zoomer på Sjælland og øerne, så de ikke bliver små
     if (state.scope === 'west' || state.scope === 'east') fitSpots(scopeSpots().filter((x) => x.center[1] < 13.5));
     state._top = topScores();
-    renderScopes(); renderVerdict(); renderTimeline(); renderPanel();
+    renderScopes(); renderVerdict(); renderTimeline(); colorCoast(); renderPanel();
   });
   $('tab-ture').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]');
