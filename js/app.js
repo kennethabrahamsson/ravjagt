@@ -60,8 +60,7 @@ function installDemoGps() {
 
 async function init() {
   $('modelVersion').textContent = MODEL_VERSION;
-  const sa = (side) => { const d = document.createElement('div'); d.style.cssText = `position:fixed;height:env(safe-area-inset-${side});`; document.body.append(d); const h = d.offsetHeight; d.remove(); return h; };
-  $('screenInfo').textContent = `Skærm ${screen.width}×${screen.height} · side ${window.innerWidth}×${window.innerHeight} · top ${sa('top')} · bund ${sa('bottom')} · ekstra ${iosGap()} · ${navigator.standalone ? 'hjemmeskærm' : 'browser'}`;
+  $('screenInfo').textContent = screenInfo();
   applyNight(store.prefs().night);
   bindUi();
   setSheet('peek');
@@ -720,61 +719,43 @@ function switchTab(tab) {
   ['steder', 'ture', 'info'].forEach((t) => { $(`tab-${t}`).hidden = t !== tab; });
 }
 
+/* iOS-hjemmeskærmsapp (set på iOS 27): dokumentets højde (clientHeight) kan være statuslinjens højde
+   kortere end vinduet (innerHeight). Alt, der står fast i bunden, følger den korte højde, og under det
+   tegner iOS en solid bjælke. Vi måler netop den forskel, gør dokumentet lige så højt som vinduet og
+   flytter kort og ark ned med forskellen. Uden forskel gør vi ingenting. */
+function isStandalone() { return !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches); }
+function shortfall() {
+  if (!isStandalone()) return 0;
+  const d = window.innerHeight - document.documentElement.clientHeight;
+  return d > 10 && d < 160 ? d : 0;
+}
+function fixViewport() {
+  const root = document.documentElement;
+  root.classList.toggle('standalone', isStandalone());
+  const d = shortfall();
+  root.style.setProperty('--gap', `${d}px`);
+  root.style.height = d ? `${window.innerHeight}px` : '';
+  if (typeof map !== 'undefined') map.invalidateSize();
+  if ($('sheet').dataset.state) setSheet($('sheet').dataset.state);
+  if ($('screenInfo')) $('screenInfo').textContent = screenInfo();
+}
+function screenInfo() {
+  const sa = (side) => { const el = document.createElement('div'); el.style.cssText = `position:fixed;visibility:hidden;height:env(safe-area-inset-${side})`; document.body.append(el); const h = el.offsetHeight; el.remove(); return h; };
+  return `Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse ${shortfall()} · ${isStandalone() ? 'hjemmeskærm' : 'browser'}`;
+}
+fixViewport();
+for (const ev of ['resize', 'orientationchange', 'pageshow']) window.addEventListener(ev, () => setTimeout(fixViewport, 100));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(fixViewport, 150); });
+document.addEventListener('focusout', (e) => { if (e.target.matches('input, textarea')) setTimeout(fixViewport, 300); });
+
 /* Bundarket: sammenfoldet (tidslinje + knap), halvt eller næsten helt op. Træk eller tryk. */
-/* iPhone-hjemmeskærmsapps: Safari giver nogle gange siden en viewport, der er statuslinje + hjemmestreg
-   kortere end skærmen, så der bliver en tom bar i bunden. Vi måler forskellen og strækker kort og ark ned. */
-// iOS 26-fejl: siden bliver ca. statuslinjens højde for kort. Vi flytter kun med det stykke,
-// og kun når fejlen faktisk er der (Apple har delvist rettet den i Safari 26.1).
-let safeTop = 0;
-function iosGap() {
-  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-  if (!standalone || window.innerWidth > window.innerHeight) return 0;
-  const missing = screen.height - window.innerHeight;
-  if (missing < 20 || missing > 160) return 0;
-  return safeTop ? Math.min(missing, safeTop) : missing;
-}
-function applyGap() {
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;top:0;height:env(safe-area-inset-top);visibility:hidden';
-  document.body.append(probe); safeTop = probe.offsetHeight; probe.remove();
-  // iOS 26 tegner ikke i området under det for korte vindue, så vi flytter intet derned.
-  // I stedet får bunden samme farve som bundarket (se CSS og manifest), så det glider sammen.
-  document.documentElement.style.setProperty('--gap', '0px');
-  document.documentElement.classList.toggle('standalone', !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches));
-}
-applyGap();
-
-/* iOS-hjemmeskærmsapp: når tastaturet har været åbent (fx ved Airtable-nøglen eller en note), krymper
-   vinduet med ca. statuslinjens højde og vokser ikke igen – det giver en sort bar i bunden.
-   iOS måler forfra, hvis siden skjules og vises i samme øjeblik. Vi gør det kun, når vinduet er for kort. */
-let peakHeight = window.innerHeight;
-window.addEventListener('resize', () => { peakHeight = Math.max(peakHeight, window.innerHeight); });
-function viewportStuck() {
-  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-  if (!standalone || window.innerWidth > window.innerHeight) return false;
-  return peakHeight - window.innerHeight > 4 || screen.height - window.innerHeight > 20;
-}
-function repairViewport() {
-  if (!viewportStuck()) return;
-  const body = document.body;
-  body.style.display = 'none';
-  void body.offsetHeight; // tving en ny måling uden at tegne imellem
-  body.style.display = '';
-  peakHeight = Math.max(peakHeight, window.innerHeight);
-  map.invalidateSize();
-  setSheet($('sheet').dataset.state);
-}
-document.addEventListener('focusout', (e) => { if (e.target.matches('input, textarea')) setTimeout(repairViewport, 150); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(repairViewport, 150); });
-window.addEventListener('pageshow', () => setTimeout(repairViewport, 300));
-
 function sheetHeights() {
   const sheet = $('sheet');
   const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
   const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight + $('scopes').offsetHeight;
   const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
   const peek = $('grab').offsetHeight + tl + actions + safe + 2;
-  const vh = window.innerHeight + iosGap();
+  const vh = window.innerHeight;
   return { peek, mid: Math.max(peek + 120, Math.round(vh * 0.5)), max: Math.round(vh * 0.86) };
 }
 
@@ -820,7 +801,7 @@ function bindSheetDrag() {
   };
   grab.addEventListener('pointerup', end);
   grab.addEventListener('pointercancel', end);
-  window.addEventListener('resize', () => { applyGap(); setSheet(sheet.dataset.state); map.invalidateSize(); });
+  window.addEventListener('resize', () => setSheet(sheet.dataset.state));
 }
 
 // Centrér et punkt i den synlige del af kortet (mellem toplinjen og bundarket)
