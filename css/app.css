@@ -398,3 +398,4 @@ html.standalone .sheet { background: var(--panel-solid); -webkit-backdrop-filter
 .check input[type="checkbox"]:checked::after { transform: translateX(20px); }
 .check { justify-content: space-between; flex-direction: row-reverse; gap: 12px; }
 dialog button:focus:not(:focus-visible) { outline: none; }
+.toast { width: max-content; max-width: calc(100vw - 32px); }
