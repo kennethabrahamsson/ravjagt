@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 22; // samme nummer som cachen i sw.js
+const APP_VERSION = 23; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -89,7 +89,10 @@ async function init() {
   refreshWeather();
   setInterval(() => refreshWeather(), 5 * 60 * 1000); // tjekker hvert 5. min, henter kun hvis vejret er over 30 min gammelt
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { refreshWeather(); runSync(); if (state.trip) requestWakeLock(); }
+    if (document.visibilityState === 'visible') {
+      refreshWeather(); runSync();
+      if (state.trip) { requestWakeLock(); getPosition().then((pos) => pos && onPosition(pos)); }
+    }
   });
   window.addEventListener('online', () => { refreshWeather(); runSync(); });
 }
@@ -549,7 +552,7 @@ function enterTripUi() {
   $('actionsTrip').hidden = false;
   tripLayer.clearLayers();
   L.marker(t.start, { icon: L.divIcon({ className: '', html: '<div class="startPin"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }), title: 'Start', zIndexOffset: 900 }).addTo(tripLayer);
-  trackLine = L.polyline(t.track.map((p) => [p[0], p[1]]), { color: '#ffb23f', weight: 4, opacity: 0.85 }).addTo(tripLayer);
+  trackLine = L.polyline(trackParts(t.track), { color: '#ffb23f', weight: 4, opacity: 0.85 }).addTo(tripLayer);
   homeLine = L.polyline([t.start, t.start], { color: '#ffb23f', weight: 2, dashArray: '6 8', opacity: 0.9, interactive: false }).addTo(tripLayer);
   t.findPts.forEach((f) => addFindMarker(f));
   requestWakeLock();
@@ -565,7 +568,7 @@ function onTripPosition(pos) {
   const moved = distance([last[0], last[1]], p);
   if (pos.coords.accuracy < 50 && (moved > 8 || Date.now() - last[2] > 20000)) {
     t.track.push([+p[0].toFixed(6), +p[1].toFixed(6), Date.now()]);
-    trackLine.addLatLng(p);
+    trackLine.setLatLngs(trackParts(t.track));
     store.setActiveTrip(t);
   }
   updateHud();
@@ -657,7 +660,52 @@ function leaveTripUi() {
   setSheet($('sheet').dataset.state);
 }
 
-const walked = (track) => track.reduce((s, p, i) => (i ? s + distance([track[i - 1][0], track[i - 1][1]], [p[0], p[1]]) : 0), 0);
+// Huller i sporet (telefonen låst, ingen GPS i over 90 sek.) tegnes ikke som en lige streg og tælles ikke med
+const GAP_MS = 90000;
+function trackParts(track) {
+  const parts = [[]];
+  track.forEach((p, i) => {
+    if (i && p[2] - track[i - 1][2] > GAP_MS) parts.push([]);
+    parts[parts.length - 1].push([p[0], p[1]]);
+  });
+  return parts;
+}
+const walked = (track) => track.reduce((s, p, i) => (i && p[2] - track[i - 1][2] <= GAP_MS ? s + distance([track[i - 1][0], track[i - 1][1]], [p[0], p[1]]) : s), 0);
+
+/* Lommetilstand: helt sort skærm, der holdes tændt, så GPS'en kører videre med telefonen i lommen.
+   Sorte pixels bruger næsten ingen strøm på iPhones OLED-skærm. Hold fingeren nede i 2 sek. for at låse op. */
+function enterPocket() {
+  requestWakeLock();
+  $('pocket').hidden = false;
+  updatePocket();
+  clearInterval(state.pocketTimer);
+  state.pocketTimer = setInterval(updatePocket, 5000);
+}
+function exitPocket() {
+  $('pocket').hidden = true;
+  clearInterval(state.pocketTimer);
+  updateHud();
+}
+function updatePocket() {
+  const t = state.trip;
+  if (!t) return exitPocket();
+  const d = state.me ? distText(distance(state.me, t.start)) : '–';
+  $('pocketInfo').textContent = `GPS kører · ${t.track.length} punkter · ${d} til start`;
+}
+function bindPocket() {
+  const el = $('pocket');
+  let timer = null;
+  const ring = $('pocketRing');
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    ring.classList.add('holding');
+    timer = setTimeout(() => { ring.classList.remove('holding'); exitPocket(); }, 2000);
+  });
+  const cancel = () => { clearTimeout(timer); ring.classList.remove('holding'); };
+  el.addEventListener('pointerup', cancel);
+  el.addEventListener('pointercancel', cancel);
+  el.addEventListener('pointerleave', cancel);
+}
 
 function getPosition() {
   return new Promise((res) => {
@@ -749,6 +797,8 @@ function bindUi() {
   $('btnStart').addEventListener('click', startTrip);
   $('btnFind').addEventListener('click', addFind);
   $('btnEnd').addEventListener('click', openEnd);
+  $('btnPocket').addEventListener('click', enterPocket);
+  bindPocket();
   $('finds-minus').addEventListener('click', () => { findsCount = Math.max(0, findsCount - 1); $('findsOut').textContent = findsCount; });
   $('finds-plus').addEventListener('click', () => { findsCount++; $('findsOut').textContent = findsCount; });
   $('endDlg').addEventListener('close', () => {

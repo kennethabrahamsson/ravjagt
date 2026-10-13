@@ -69,6 +69,10 @@
   </div>
   <div class="actions" id="actionsTrip" hidden>
     <button id="btnFind" class="primary">+ Fund her</button>
+    <button id="btnPocket" class="ghost pocketBtn" aria-label="Lommetilstand: sort skærm, GPS kører videre">
+      <svg viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10 18.5h4"/></svg>
+      Lomme
+    </button>
     <button id="btnEnd" class="ghost">Afslut tur</button>
   </div>
 
@@ -122,6 +126,13 @@
 </dialog>
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<div class="pocket" id="pocket" hidden>
+  <div class="pocketRing" id="pocketRing"></div>
+  <p>Lommetilstand</p>
+  <p class="pocketInfo" id="pocketInfo"></p>
+  <p class="pocketHint">Hold fingeren på skærmen i 2 sekunder for at låse op</p>
+</div>
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script type="module" src="js/app.js"></script>
