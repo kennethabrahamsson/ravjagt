@@ -21,10 +21,10 @@
 
 <header class="top" id="top">
   <div class="verdict">
-    <span class="dot" id="vDot" aria-hidden="true"></span>
     <div class="vText">
+      <span class="eyebrow"><span class="dot" id="vDot" aria-hidden="true"></span><span id="vEyebrow">Ravjagt</span></span>
       <strong id="vTitle">Henter vejret …</strong>
-      <span id="vSub">Vind, bølger og vandstand fra Open-Meteo</span>
+      <span id="vSub">Vind fra DMI, bølger og vandstand fra Open-Meteo</span>
     </div>
     <button class="now" id="btnNow" hidden>Nu</button>
   </div>
@@ -62,10 +62,12 @@
   <div class="timeline" id="timeline" aria-label="Vælg tidspunkt"></div>
 
   <div class="actions" id="actionsIdle">
-    <button id="btnStart" class="primary">
-      <svg viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H7"/></svg>
-      Start tur her
-    </button>
+    <div class="slide" id="slideStart" role="button" tabindex="0" aria-label="Start tur her. Swipe knappen mod højre, eller tryk Enter.">
+      <span class="slideFill" aria-hidden="true"></span>
+      <span class="slideLabel" aria-hidden="true">Swipe for at starte tur</span>
+      <span class="chev" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="knob" id="slideKnob" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 21V4h11l-2 4 2 4H7"/></svg></span>
+    </div>
   </div>
   <div class="actions" id="actionsTrip" hidden>
     <button id="btnFind" class="primary">+ Fund her</button>

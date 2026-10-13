@@ -5,10 +5,10 @@ import * as store from './store.js';
 import * as cloud from './sync.js';
 
 const $ = (id) => document.getElementById(id);
-const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
+const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 27; // samme nummer som cachen i sw.js
+const APP_VERSION = 28; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -37,12 +37,13 @@ const layers = {
 };
 let layerName = store.prefs().layer === 'foto' ? 'foto' : 'kort';
 layers[layerName].addTo(map);
+map.getContainer().classList.toggle('foto', layerName === 'foto');
 
 const coastLayer = L.layerGroup().addTo(map);
 const trapLayer = L.layerGroup();
 const tripLayer = L.layerGroup().addTo(map);
 const bestLayer = L.layerGroup().addTo(map);
-let meMarker = null, meCircle = null, homeLine = null, trackLine = null;
+let meMarker = null, meCircle = null, homeLine = null, trackLine = null, trackGlow = null;
 
 /* ---------- Opstart ---------- */
 // Inde i den native iPhone-app kommer GPS'en fra appen – også i baggrunden under en tur
@@ -223,7 +224,9 @@ function renderVerdict() {
   const dark = w.isDay[i] === 0;
   $('vDot').className = `dot ${best.r.level}`;
   const when = i === state.nowIdx ? 'Lige nu' : timeLabel(w.time[i]);
-  $('vTitle').textContent = `${when}: ${LEVELS[best.r.level].label.toLowerCase()} ${scopeLabel()}`;
+  $('vEyebrow').textContent = `${when} · ${scopeLabel()}`;
+  $('vTitle').textContent = LEVELS[best.r.level].label;
+  $('vTitle').className = best.r.level;
   const next = nextWindow();
   const bits = [];
   if (best.r.level === 'green') bits.push(`Bedst: ${best.spot.name}`);
@@ -295,20 +298,29 @@ function renderTimeline() {
 }
 
 /* Kysten tegnes én gang; farverne skiftes, når tidspunktet skifter */
+/* Kysten tegnes én gang; farverne skiftes, når tidspunktet skifter.
+   Hver ravkyst-strækning har en bred, svag "glød" under sig i samme farve. */
+map.createPane('glow').style.zIndex = 390; // under kystlinjerne (overlayPane = 400)
+const glowRenderer = L.canvas({ pane: 'glow', padding: 0.3 });
+const glowLayer = L.layerGroup().addTo(map);
 function drawCoast() {
-  coastLayer.clearLayers();
+  coastLayer.clearLayers(); glowLayer.clearLayers();
   for (const spot of state.spots) {
     if (spot.open) {
-      spot.layer = L.polyline(spot.line, { color: '#5b6b70', weight: lineWeight(), opacity: 0.95, lineCap: 'butt' })
+      spot.glow = L.polyline(spot.line, { renderer: glowRenderer, color: '#5b6b70', weight: lineWeight() * 2.4, opacity: 0.14, lineCap: 'round', interactive: false }).addTo(glowLayer);
+      spot.layer = L.polyline(spot.line, { color: '#5b6b70', weight: lineWeight(), opacity: 0.95, lineCap: 'round' })
         .on('click', () => openSpot(spot.id)).addTo(coastLayer);
     } else {
-      spot.layer = L.polyline(spot.line, { color: '#6f8086', weight: 1.2, opacity: 0.35, interactive: false }).addTo(coastLayer);
+      spot.layer = L.polyline(spot.line, { color: '#8e8e93', weight: 1.2, opacity: 0.25, interactive: false }).addTo(coastLayer);
     }
   }
-  for (const ln of state.trapLines) L.polyline(ln, { color: '#e8eef0', weight: 2, opacity: 0.8, interactive: false }).addTo(trapLayer);
+  for (const ln of state.trapLines) L.polyline(ln, { color: '#f5f5f2', weight: 2, opacity: 0.7, interactive: false }).addTo(trapLayer);
   map.on('zoomend', () => {
     const w = lineWeight();
-    for (const s of state.open) s.layer.setStyle({ weight: s._in === false ? Math.max(1.5, w / 3) : w });
+    for (const s of state.open) {
+      s.layer.setStyle({ weight: s._in === false ? Math.max(1.5, w / 3) : w });
+      s.glow.setStyle({ weight: w * 2.4 });
+    }
     if (map.getZoom() >= 13) trapLayer.addTo(map); else map.removeLayer(trapLayer);
   });
 }
@@ -320,14 +332,17 @@ function colorCoast() {
   const region = state.scope === 'west' ? 'v' : state.scope === 'east' ? 'o' : null;
   const near = state.scope === 'near' ? new Set(scopeSpots()) : null;
   const w = lineWeight();
+  const toggle = (group, layer, on) => { if (layer && on !== group.hasLayer(layer)) on ? group.addLayer(layer) : group.removeLayer(layer); };
   for (const spot of state.spots) {
     const show = !region || spot.region === region;
-    if (show !== coastLayer.hasLayer(spot.layer)) show ? coastLayer.addLayer(spot.layer) : coastLayer.removeLayer(spot.layer);
-    if (!spot.open || !show) continue;
-    spot._in = !near || near.has(spot);
-    spot.layer.setStyle(spot._in
-      ? { color: COLORS[levelOf(quick(spot, state.selIdx))], opacity: 0.95, weight: w }
-      : { color: '#6f8086', opacity: 0.4, weight: Math.max(1.5, w / 3) });
+    toggle(coastLayer, spot.layer, show);
+    if (!spot.open) continue;
+    spot._in = show && (!near || near.has(spot));
+    toggle(glowLayer, spot.glow, spot._in);
+    if (!show) continue;
+    const color = COLORS[levelOf(quick(spot, state.selIdx))];
+    spot.layer.setStyle(spot._in ? { color, opacity: 0.95, weight: w } : { color: '#8e8e93', opacity: 0.35, weight: Math.max(1.5, w / 3) });
+    if (spot._in) spot.glow.setStyle({ color, opacity: 0.14 });
   }
 }
 
@@ -600,7 +615,8 @@ function enterTripUi() {
   $('actionsTrip').hidden = false;
   tripLayer.clearLayers();
   L.marker(t.start, { icon: L.divIcon({ className: '', html: '<div class="startPin"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }), title: 'Start', zIndexOffset: 900 }).addTo(tripLayer);
-  trackLine = L.polyline(trackParts(t.track), { color: '#ffb23f', weight: 4, opacity: 0.85 }).addTo(tripLayer);
+  trackGlow = L.polyline(trackParts(t.track), { renderer: glowRenderer, color: '#ffb72b', weight: 14, opacity: 0.22, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(tripLayer);
+  trackLine = L.polyline(trackParts(t.track), { color: '#ffc94d', weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(tripLayer);
   homeLine = L.polyline([t.start, t.start], { color: '#ffb23f', weight: 2, dashArray: '6 8', opacity: 0.9, interactive: false }).addTo(tripLayer);
   t.findPts.forEach((f) => addFindMarker(f));
   requestWakeLock();
@@ -627,6 +643,7 @@ function addTrackPoint(pos) {
 function onTripPosition(pos) {
   addTrackPoint(pos);
   trackLine.setLatLngs(trackParts(state.trip.track));
+  trackGlow.setLatLngs(trackParts(state.trip.track));
   store.setActiveTrip(state.trip);
   updateHud();
 }
@@ -861,7 +878,7 @@ function bindUi() {
   });
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   bindSheetDrag();
-  $('btnStart').addEventListener('click', startTrip);
+  bindSlide();
   $('btnFind').addEventListener('click', addFind);
   $('btnEnd').addEventListener('click', openEnd);
   $('btnPocket').addEventListener('click', enterPocket);
@@ -883,6 +900,7 @@ function bindUi() {
     map.removeLayer(layers[layerName]);
     layerName = layerName === 'kort' ? 'foto' : 'kort';
     layers[layerName].addTo(map);
+    map.getContainer().classList.toggle('foto', layerName === 'foto');
     store.setPrefs({ layer: layerName });
   });
   $('btnNight').addEventListener('click', () => {
@@ -890,6 +908,39 @@ function bindUi() {
     applyNight(on);
     store.setPrefs({ night: on });
   });
+}
+
+/* Swipe for at starte tur: knappen trækkes mod højre. Et tryk alene starter ikke en tur (heller ikke i lommen). */
+function bindSlide() {
+  const track = $('slideStart'), knob = $('slideKnob');
+  let x0 = null, dx = 0, max = 0, armed = false;
+  const set = (x) => { dx = x; track.style.setProperty('--x', `${x}px`); track.style.setProperty('--p', max ? x / max : 0); };
+  track.addEventListener('pointerdown', (e) => {
+    max = track.clientWidth - knob.offsetWidth - 8;
+    x0 = e.clientX - dx; armed = false;
+    track.setPointerCapture(e.pointerId); track.classList.add('dragging');
+  });
+  track.addEventListener('pointermove', (e) => {
+    if (x0 === null) return;
+    set(Math.max(0, Math.min(max, e.clientX - x0)));
+    if (!armed && dx > max * 0.8) { armed = true; haptic('light'); }
+    if (armed && dx < max * 0.8) armed = false;
+  });
+  const end = () => {
+    if (x0 === null) return;
+    x0 = null; track.classList.remove('dragging');
+    if (dx > max * 0.8) {
+      set(max);
+      startTrip();
+      setTimeout(() => set(0), 600);
+    } else {
+      if (dx < 6) { track.classList.remove('nudge'); void track.offsetWidth; track.classList.add('nudge'); toast('Swipe knappen mod højre for at starte'); }
+      set(0);
+    }
+  };
+  track.addEventListener('pointerup', end);
+  track.addEventListener('pointercancel', end);
+  track.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startTrip(); } });
 }
 
 function openSpot(id) {

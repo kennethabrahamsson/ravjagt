@@ -1,9 +1,9 @@
 // Offline: appen selv caches ved installation, kortfliser og vejr caches undervejs.
-const VERSION = 'ravjagt-v27';
+const VERSION = 'ravjagt-v28';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/model.js', 'js/spots.js', 'js/weather.js', 'js/store.js', 'js/sync.js',
   'data/dk.json', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png',
+  'icons/icon-192.png', 'vendor/fonts/outfit-latin.woff2', 'icons/icon-512.png', 'icons/icon-180.png',
 ];
 
 self.addEventListener('install', (e) => {

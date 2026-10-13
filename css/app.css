@@ -399,3 +399,143 @@ html.standalone .sheet { background: var(--panel-solid); -webkit-backdrop-filter
 .check { justify-content: space-between; flex-direction: row-reverse; gap: 12px; }
 dialog button:focus:not(:focus-visible) { outline: none; }
 .toast { width: max-content; max-width: calc(100vw - 32px); }
+
+/* ==========================================================================
+   Rav – visuel retning (okt. 2026): neutral sort, én varm accent (rav-gradient),
+   stor geometrisk typografi direkte på kortet, glødende linjer. Grøn/gul/rød
+   bevares kun dér, hvor de betyder noget (kysten, scorer).
+   ========================================================================== */
+@font-face {
+  font-family: "Outfit"; font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url("../vendor/fonts/outfit-latin.woff2") format("woff2");
+}
+:root {
+  --ink: #0a0a0b;
+  --panel-solid: #141416;
+  --raise: #1c1c1f;
+  --line: rgba(255, 255, 255, 0.08);
+  --fg: #f5f5f2;
+  --mute: #8e8e93;
+  --amber: #ffb72b;
+  --amber-ink: #1a1100;
+  --go: #3ddc84;
+  --maybe: #ffc94d;
+  --no: #ff5a4e;
+  --rav: linear-gradient(135deg, #ffd65c 0%, #ffb72b 45%, #ff8a2b 100%);
+  --display: "Outfit", ui-rounded, -apple-system, system-ui, sans-serif;
+  --round: var(--display);
+  --glass: rgba(20, 20, 22, 0.62);
+  --glass-strong: rgba(20, 20, 22, 0.82);
+  --glass-edge: rgba(255, 255, 255, 0.09);
+  --glass-shine: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 45%);
+}
+body.night { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-38deg) brightness(0.62); }
+
+/* Kortet: næsten sort og afdæmpet, så kyst og rute lyser */
+.leaflet-container { background: var(--ink); }
+.leaflet-tile-pane { filter: brightness(0.58) saturate(0.15) contrast(1.15); }
+#map.foto .leaflet-tile-pane { filter: brightness(0.82) saturate(0.85); }
+.leaflet-control-attribution { background: rgba(10, 10, 11, 0.55) !important; }
+
+/* Toplinjen: ingen boks – stor overskrift direkte på kortet over en blød mørk gradient */
+.top {
+  left: 0; right: 0; top: 0; border-radius: 0; border: 0; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  padding: calc(var(--safe-t) + 6px) 20px 34px;
+  background: linear-gradient(180deg, rgba(10, 10, 11, 0.94) 0%, rgba(10, 10, 11, 0.72) 50%, rgba(10, 10, 11, 0) 100%);
+  pointer-events: none;
+}
+.top .now { pointer-events: auto; }
+.verdict { padding: 0; align-items: flex-start; gap: 12px; }
+.vText { gap: 2px; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 600 11px/1.2 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--mute); }
+.eyebrow .dot { width: 8px; height: 8px; box-shadow: none; }
+#vTitle { font: 500 40px/1.04 var(--display); letter-spacing: -0.025em; color: var(--fg); margin-top: 4px; transition: opacity 0.3s; }
+#vTitle.green { background: var(--rav); -webkit-background-clip: text; background-clip: text; color: transparent; }
+#vTitle.red { color: rgba(245, 245, 242, 0.92); }
+#vSub { font-size: 13px; color: rgba(245, 245, 242, 0.62); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-top: 4px; }
+.now { margin-top: 2px; padding: 8px 14px; border-radius: 99px; background: rgba(255, 255, 255, 0.1); border: 0.5px solid var(--glass-edge); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font: 600 13px var(--sans); }
+
+/* Tur: stor afstand, pil i en rav-ring */
+.hud { background: var(--glass-shine), var(--glass); border-radius: 30px; padding: 10px 18px 10px 10px; gap: 14px; border-color: rgba(255, 183, 43, 0.25); }
+.arrow { width: 56px; height: 56px; padding: 12px; border-radius: 50%; background: rgba(255, 183, 43, 0.12); box-shadow: inset 0 0 0 1px rgba(255, 183, 43, 0.35); filter: none; }
+.arrow path { fill: #ffc94d; }
+.hudDist { font: 500 36px/1 var(--display); letter-spacing: -0.03em; }
+.hudSub { font-size: 12px; }
+.hudTime { font: 500 20px var(--display); }
+.hudFinds { color: #ffc94d; }
+
+/* Bundark: neutralt mørkt glas */
+.sheet { background: var(--glass-shine), rgba(18, 18, 20, 0.8); border-color: var(--glass-edge); }
+
+/* Swipe for at starte tur */
+.slide {
+  --x: 0px; --p: 0;
+  position: relative; flex: 1; height: 62px; border-radius: 99px; overflow: hidden; touch-action: none; cursor: grab;
+  background: rgba(255, 255, 255, 0.06); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none;
+}
+.slide:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.slideFill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--x) + 60px); border-radius: 99px; background: var(--rav); opacity: calc(0.14 + var(--p) * 0.5); transition: width 0.45s var(--bounce), opacity 0.3s; }
+.slideLabel { font: 500 17px var(--display); letter-spacing: -0.01em; color: var(--fg); opacity: calc(1 - var(--p) * 1.3); padding-left: 40px; transition: opacity 0.2s; }
+.chev { position: absolute; right: 22px; display: flex; gap: 2px; opacity: calc(0.7 - var(--p)); }
+.chev i { width: 8px; height: 8px; border-right: 2px solid var(--fg); border-top: 2px solid var(--fg); transform: rotate(45deg); opacity: 0.25; animation: chev 1.6s ease-in-out infinite; }
+.chev i:nth-child(2) { animation-delay: 0.18s; } .chev i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes chev { 0%, 100% { opacity: 0.2; } 40% { opacity: 0.95; } }
+.knob {
+  position: absolute; left: 5px; top: 5px; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--rav); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 6px 18px rgba(255, 150, 40, 0.45);
+  transform: translateX(var(--x)); transition: transform 0.5s var(--bounce);
+}
+.knob svg { width: 22px; height: 22px; stroke: var(--amber-ink); stroke-width: 2.2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.slide.dragging .knob, .slide.dragging .slideFill { transition: none; }
+.slide.dragging .knob { transform: translateX(var(--x)) scale(1.06); }
+.slide.nudge .knob { animation: nudge 0.7s var(--bounce); }
+@keyframes nudge { 0% { transform: translateX(0); } 35% { transform: translateX(44px); } 100% { transform: translateX(0); } }
+
+/* Knapper og valg i rav */
+.primary { background: var(--rav); color: var(--amber-ink); font: 600 18px var(--display); letter-spacing: -0.01em; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 8px 22px rgba(255, 150, 40, 0.3); }
+.ghost, .pocketBtn { font-family: var(--display); font-weight: 500; font-size: 16px; background: rgba(255, 255, 255, 0.07); }
+.scopes .thumb { background: var(--rav); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 4px 14px rgba(255, 150, 40, 0.3); }
+.tabs .thumb { background: rgba(255, 255, 255, 0.12); }
+.scopeChip, .tabs button { font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: -0.005em; }
+.scopes, .tabs { background: rgba(0, 0, 0, 0.35); }
+
+/* Tidslinje: runde søjler */
+.h { width: 8px; }
+.h i, .h { border-radius: 99px; }
+.h.dark { background: rgba(255, 255, 255, 0.045); }
+.h.sel i { box-shadow: 0 0 0 2px var(--fg), 0 0 12px rgba(255, 255, 255, 0.35); }
+.dayLabel { font-family: var(--display); font-weight: 500; letter-spacing: 0.08em; }
+
+/* Lister: store tal i stedet for bokse */
+.score { background: none !important; box-shadow: none; width: 44px; font: 500 28px/1 var(--display); letter-spacing: -0.03em; justify-content: start; }
+.spot { grid-template-columns: 48px 1fr auto; padding: 13px 0; }
+.spotName { font: 500 16px/1.25 var(--display); letter-spacing: -0.01em; }
+.spotName small { font-family: var(--sans); margin-top: 2px; }
+.sectionLabel { letter-spacing: 0.12em; font-size: 11px; font-weight: 600; }
+.trapTag { color: #ffc94d; }
+.rank { background: var(--rav); color: var(--amber-ink); font-family: var(--display); }
+.detailHead h3 { font: 500 24px/1.1 var(--display); letter-spacing: -0.02em; }
+.fact b, .calib b { font: 500 22px var(--display); letter-spacing: -0.02em; }
+.prose h3 { font: 500 18px var(--display); }
+.back, .more, .steps a, .retry { color: #ffc94d; }
+.reasons li::before { background: var(--rav); }
+.trip .n { font: 500 26px var(--display); color: #ffc94d; }
+
+/* Dialog */
+dialog h2 { font: 500 26px var(--display); letter-spacing: -0.02em; }
+.stepper output { font: 500 48px var(--display); background: var(--rav); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Kortmarkører */
+.bestPin { font: 600 16px var(--display); border: 2.5px solid #fff; box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.08), 0 6px 18px rgba(0, 0, 0, 0.6); }
+.bestPin.green { box-shadow: 0 0 0 6px rgba(61, 220, 132, 0.18), 0 0 22px rgba(61, 220, 132, 0.55); }
+.bestPin.yellow { box-shadow: 0 0 0 6px rgba(255, 201, 77, 0.18), 0 0 22px rgba(255, 201, 77, 0.5); }
+.startPin { background: var(--rav); }
+.findPin { background: var(--rav); }
+.dot.green { background: var(--go); }
+
+@media (prefers-reduced-transparency: reduce) {
+  .top { background: var(--ink); }
+  .sheet, .hud { background: var(--panel-solid); }
+}
