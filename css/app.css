@@ -542,3 +542,14 @@ dialog h2 { font: 500 26px var(--display); letter-spacing: -0.02em; }
 
 /* Siden må ikke zoome (dobbelttryk eller knib) – kun kortet zoomer */
 html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* MapLibre: kortets kontroller over bundarket, i appens udtryk */
+#map { background: var(--ink); }
+.maplibregl-ctrl-bottom-left { bottom: calc(var(--sheet-h, 0px) - var(--gap, 0px)); transition: bottom 0.5s var(--spring); }
+.maplibregl-ctrl-attrib { background: rgba(10, 10, 11, 0.55) !important; color: var(--mute) !important; font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: var(--mute) !important; }
+.maplibregl-ctrl-attrib.maplibregl-compact { background: rgba(20, 20, 22, 0.7) !important; }
+.maplibregl-ctrl-attrib-button { filter: invert(1); opacity: 0.6; }
+.maplibregl-canvas { outline: none; }
+.maplibregl-marker { will-change: transform; }
+.startPin { transform: rotate(-45deg); margin-bottom: 4px; }

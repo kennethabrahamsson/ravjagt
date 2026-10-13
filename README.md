@@ -37,7 +37,7 @@ Grøn ≥ 55, gul ≥ 30. Vægtene er sat efter erfaringsregler, ikke målt. De 
 - Vejr og hav: [Open-Meteo](https://open-meteo.com) (forecast og marine), to punkter. Historisk vejr kan hentes fra Open-Meteos arkiv, så vi behøver ikke selv logge vejret – kun turene.
 - Kyst, høfder, moler, bølgebrydere og stednavne: © OpenStreetMap-bidragydere (Overpass, hentet 13.10.2026). Nabolandenes kyst (til at beregne åbent vand): Natural Earth 10m. Bygges med `python3 -I tools/build_coast.py` → `data/dk.json` (rådata i `tools/cache/`, ikke i git).
 - Vejr: 66 punkter langs kysten (Open-Meteo forecast + marine).
-- Kort: Esri Dark Gray Canvas og World Imagery.
+- Kort: MapLibre (`js/mapview.js`) med eget mørkt udtryk på OpenFreeMap-vektorfliser, højde- og dybdekurver fra Terrarium-højdemodellen (maplibre-contour tegner dem på telefonen) og Esri World Imagery som luftfoto.
 
 ## iPhone-app (ios/)
 

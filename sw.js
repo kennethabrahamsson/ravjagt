@@ -1,8 +1,8 @@
 // Offline: appen selv caches ved installation, kortfliser og vejr caches undervejs.
-const VERSION = 'ravjagt-v29';
+const VERSION = 'ravjagt-v30';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/model.js', 'js/spots.js', 'js/weather.js', 'js/store.js', 'js/sync.js',
-  'data/dk.json', 'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'manifest.webmanifest',
+  'data/dk.json', 'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css', 'vendor/maplibre/maplibre-contour.min.js', 'js/mapview.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'vendor/fonts/outfit-latin.woff2', 'icons/icon-512.png', 'icons/icon-180.png',
 ];
 
@@ -19,7 +19,9 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
   // Kortfliser: cache først
-  if (/cartocdn\.com|arcgisonline\.com/.test(url.host)) {
+  // Kun fliser ({z}/{x}/{y}) og skrifttegn (.pbf) – ikke kortets indholdsfortegnelse, som skifter version
+  const isTile = /\/\d+\/\d+\/\d+(\.\w+)?$/.test(url.pathname) || /\/fonts\/.+\.pbf$/.test(url.pathname);
+  if (isTile && /arcgisonline\.com|openfreemap\.org|elevation-tiles-prod/.test(url.host + url.pathname)) {
     e.respondWith(caches.open('tiles').then(async (c) => {
       const hit = await c.match(e.request);
       if (hit) return hit;

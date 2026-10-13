@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
 <link rel="stylesheet" href="css/app.css">
 <title>Ravjagt</title>
 </head>
@@ -102,7 +102,7 @@
     <p>Farven svarer på: skal jeg gå ud nu med UV-lygten? <span class="chip green">Grøn</span> gå ud · <span class="chip yellow">Gul</span> måske – fx i dagslys, hvor du kun kan lede med øjnene, eller mens stormen stadig står på · <span class="chip red">Rød</span> spild af tid. Grøn kræver, at vinden har lagt sig, og at det er mørkt. Modellen er en hypotese (version <span id="modelVersion"></span>). Den bliver kun klogere, hvis du logger alle ture – også dem uden fund.</p>
     <h3>Data</h3>
     <p class="mute small" id="screenInfo"></p>
-    <p class="mute">Vind: DMI's HARMONIE-model via Open-Meteo. Bølger og vandstand: Open-Meteo. Kyst, moler og bølgebrydere: © OpenStreetMap-bidragydere. Kort og luftfoto: © Esri. Din position forlader aldrig telefonen.</p>
+    <p class="mute">Vind: DMI's HARMONIE-model via Open-Meteo. Bølger og vandstand: Open-Meteo. Kyst, moler og bølgebrydere: © OpenStreetMap-bidragydere. Kort: © OpenFreeMap, © OpenMapTiles, © OpenStreetMap-bidragydere. Højde og havbund: Mapzen Terrarium (AWS åbne data). Luftfoto: © Esri. Din position forlader aldrig telefonen.</p>
   </div>
 </section>
 
@@ -137,7 +137,8 @@
   <p class="pocketHint">Hold fingeren på skærmen i 2 sekunder for at låse op</p>
 </div>
 
-<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/maplibre/maplibre-gl.js"></script>
+<script src="vendor/maplibre/maplibre-contour.min.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

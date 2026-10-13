@@ -3,12 +3,13 @@ import { loadCoast, distance, bearing } from './spots.js';
 import { cachedWeather, fetchWeather, hourKey } from './weather.js';
 import * as store from './store.js';
 import * as cloud from './sync.js';
+import { createMap } from './mapview.js';
 
 const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 29; // samme nummer som cachen i sw.js
+const APP_VERSION = 30; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -19,31 +20,12 @@ const state = {
 };
 
 /* ---------- Kort ---------- */
-const canvas = L.canvas({ padding: 0.3, tolerance: 8 });
-const map = L.map('map', { zoomControl: false, attributionControl: false, renderer: canvas, preferCanvas: true }).fitBounds(DK);
-L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
-const layers = {
-  kort: L.layerGroup([
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19, maxNativeZoom: 16, attribution: 'Kort © Esri, HERE, Garmin, © OpenStreetMap',
-    }),
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19, maxNativeZoom: 16,
-    }),
-  ]),
-  foto: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19, attribution: 'Luftfoto © Esri',
-  }),
-};
+const mv = createMap('map', { onSpotClick: (id) => openSpot(id), onDragStart: () => { lastPan = Date.now(); } });
 let layerName = store.prefs().layer === 'foto' ? 'foto' : 'kort';
-layers[layerName].addTo(map);
-map.getContainer().classList.toggle('foto', layerName === 'foto');
+mv.setLayer(layerName);
+$('map').classList.toggle('foto', layerName === 'foto');
+const inDK = (p) => p[0] > 54.3 && p[0] < 58 && p[1] > 7.6 && p[1] < 15.4;
 
-const coastLayer = L.layerGroup().addTo(map);
-const trapLayer = L.layerGroup();
-const tripLayer = L.layerGroup().addTo(map);
-const bestLayer = L.layerGroup().addTo(map);
-let meMarker = null, meCircle = null, homeLine = null, trackLine = null, trackGlow = null;
 
 /* Siden må ikke zoome som et website (Safari ignorerer user-scalable=no); kortet håndterer selv sine fingre */
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
@@ -308,52 +290,21 @@ function renderTimeline() {
 }
 
 /* Kysten tegnes én gang; farverne skiftes, når tidspunktet skifter */
-/* Kysten tegnes én gang; farverne skiftes, når tidspunktet skifter.
-   Hver ravkyst-strækning har en bred, svag "glød" under sig i samme farve. */
-map.createPane('glow').style.zIndex = 390; // under kystlinjerne (overlayPane = 400)
-const glowRenderer = L.canvas({ pane: 'glow', padding: 0.3 });
-const glowLayer = L.layerGroup().addTo(map);
-function drawCoast() {
-  coastLayer.clearLayers(); glowLayer.clearLayers();
-  for (const spot of state.spots) {
-    if (spot.open) {
-      spot.glow = L.polyline(spot.line, { renderer: glowRenderer, color: '#5b6b70', weight: lineWeight() * 2.4, opacity: 0.14, lineCap: 'round', interactive: false }).addTo(glowLayer);
-      spot.layer = L.polyline(spot.line, { color: '#5b6b70', weight: lineWeight(), opacity: 0.95, lineCap: 'round' })
-        .on('click', () => openSpot(spot.id)).addTo(coastLayer);
-    } else {
-      spot.layer = L.polyline(spot.line, { color: '#8e8e93', weight: 1.2, opacity: 0.25, interactive: false }).addTo(coastLayer);
-    }
-  }
-  for (const ln of state.trapLines) L.polyline(ln, { color: '#f5f5f2', weight: 2, opacity: 0.7, interactive: false }).addTo(trapLayer);
-  map.on('zoomend', () => {
-    const w = lineWeight();
-    for (const s of state.open) {
-      s.layer.setStyle({ weight: s._in === false ? Math.max(1.5, w / 3) : w });
-      s.glow.setStyle({ weight: w * 2.4 });
-    }
-    if (map.getZoom() >= 13) trapLayer.addTo(map); else map.removeLayer(trapLayer);
-  });
-}
-const lineWeight = () => { const z = map.getZoom(); return z >= 13 ? 9 : z >= 11 ? 7 : z >= 9 ? 5 : 3; };
+/* Kysten tegnes én gang; farverne skiftes, når tidspunktet skifter */
+function drawCoast() { mv.setCoast(state.spots, state.trapLines); }
 
-// Vest/Øst: kun den landsdels kyst vises. Nær mig: kysten uden for 30 km bliver grå. Hele landet: alt.
 function colorCoast() {
   renderBest();
   const region = state.scope === 'west' ? 'v' : state.scope === 'east' ? 'o' : null;
   const near = state.scope === 'near' ? new Set(scopeSpots()) : null;
-  const w = lineWeight();
-  const toggle = (group, layer, on) => { if (layer && on !== group.hasLayer(layer)) on ? group.addLayer(layer) : group.removeLayer(layer); };
-  for (const spot of state.spots) {
+  const items = [];
+  state.spots.forEach((spot, i) => {
+    if (!spot.open) return;
     const show = !region || spot.region === region;
-    toggle(coastLayer, spot.layer, show);
-    if (!spot.open) continue;
     spot._in = show && (!near || near.has(spot));
-    toggle(glowLayer, spot.glow, spot._in);
-    if (!show) continue;
-    const color = COLORS[levelOf(quick(spot, state.selIdx))];
-    spot.layer.setStyle(spot._in ? { color, opacity: 0.95, weight: w } : { color: '#8e8e93', opacity: 0.35, weight: Math.max(1.5, w / 3) });
-    if (spot._in) spot.glow.setStyle({ color, opacity: 0.14 });
-  }
+    if (show) items.push({ i, on: spot._in, color: COLORS[levelOf(quick(spot, state.selIdx))] });
+  });
+  mv.styleCoast(items, region);
 }
 
 /* ---------- De tre bedste steder som nummererede markører ---------- */
@@ -390,15 +341,9 @@ function bestSpots() {
   return picked;
 }
 function renderBest() {
-  bestLayer.clearLayers();
   if (!state.ready) return;
   state.best = bestSpots();
-  state.best.forEach((b, n) => {
-    L.marker(b.pos, {
-      icon: L.divIcon({ className: '', html: `<div class="bestPin ${b.r.level}" style="--d:${n * 90}ms">${n + 1}</div>`, iconSize: [32, 32] }),
-      title: `${n + 1}. ${b.spot.name}`, zIndexOffset: 700,
-    }).on('click', () => { haptic('light'); openSpot(b.spot.id); }).addTo(bestLayer);
-  });
+  mv.setBest(state.best.map((b) => ({ pos: b.pos, level: b.r.level, onClick: () => { haptic('light'); openSpot(b.spot.id); } })));
 }
 
 function renderPanel() {
@@ -459,10 +404,7 @@ function spotDetailHtml(id) {
 
 // Zoom kortet ind på en landsdel, så den fylder den synlige del mellem toplinje og bundark
 function fitSpots(spots) {
-  if (!spots.length) return;
-  const b = L.latLngBounds(spots.map((s) => s.center));
-  const top = $('top').getBoundingClientRect().bottom;
-  map.fitBounds(b, { paddingTopLeft: [16, top + 12], paddingBottomRight: [60, $('sheet').offsetHeight + 12] });
+  mv.fit(spots.map((s) => s.center), $('top').getBoundingClientRect().bottom, $('sheet').offsetHeight);
 }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
@@ -559,17 +501,11 @@ function onPosition(pos) {
   const { latitude, longitude, accuracy } = pos.coords;
   state.me = [latitude, longitude];
   state.acc = accuracy;
-  if (!meMarker) {
-    meCircle = L.circle(state.me, { radius: accuracy, color: '#4aa3ff', weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
-    meMarker = L.marker(state.me, { icon: L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [18, 18] }), interactive: false, zIndexOffset: 1000 }).addTo(map);
-  } else {
-    meMarker.setLatLng(state.me);
-    meCircle.setLatLng(state.me).setRadius(accuracy);
-  }
+  mv.setMe(state.me, accuracy);
   if (firstFix) {
     firstFix = false;
     // Er du i Danmark, starter kortet ved dig
-    if (!state.trip && L.latLngBounds(DK).pad(0.1).contains(state.me)) focus(state.me, 11);
+    if (!state.trip && inDK(state.me)) focus(state.me, 11);
     if (state.ready) { renderScope(); if (state.scope === 'near') colorCoast(); }
   }
   if (state.trip) {
@@ -580,7 +516,6 @@ function onPosition(pos) {
 }
 
 let lastPan = 0;
-map.on('dragstart', () => { lastPan = Date.now(); });
 
 /* ---------- Tur ---------- */
 async function startTrip() {
@@ -623,12 +558,7 @@ function enterTripUi() {
   setSheet('peek');
   $('actionsIdle').hidden = true;
   $('actionsTrip').hidden = false;
-  tripLayer.clearLayers();
-  L.marker(t.start, { icon: L.divIcon({ className: '', html: '<div class="startPin"></div>', iconSize: [30, 30], iconAnchor: [15, 30] }), title: 'Start', zIndexOffset: 900 }).addTo(tripLayer);
-  trackGlow = L.polyline(trackParts(t.track), { renderer: glowRenderer, color: '#ffb72b', weight: 14, opacity: 0.22, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(tripLayer);
-  trackLine = L.polyline(trackParts(t.track), { color: '#ffc94d', weight: 4, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(tripLayer);
-  homeLine = L.polyline([t.start, t.start], { color: '#ffb23f', weight: 2, dashArray: '6 8', opacity: 0.9, interactive: false }).addTo(tripLayer);
-  t.findPts.forEach((f) => addFindMarker(f));
+  mv.setTrip(t, trackParts(t.track));
   requestWakeLock();
   updateHud();
   clearInterval(state.hudTimer);
@@ -652,8 +582,7 @@ function addTrackPoint(pos) {
 
 function onTripPosition(pos) {
   addTrackPoint(pos);
-  trackLine.setLatLngs(trackParts(state.trip.track));
-  trackGlow.setLatLngs(trackParts(state.trip.track));
+  mv.updateTrack(trackParts(state.trip.track));
   store.setActiveTrip(state.trip);
   updateHud();
 }
@@ -667,7 +596,7 @@ function updateHud() {
   if (!state.me) { $('hudDist').textContent = '–'; return; }
   const d = distance(state.me, t.start);
   const b = bearing(state.me, t.start);
-  homeLine.setLatLngs([state.me, t.start]);
+  mv.setHome(state.me, t.start);
   $('hudDist').textContent = d < 15 ? 'Du er her' : distText(d);
   const rel = state.heading != null ? b - state.heading : b;
   $('arrow').style.transform = `rotate(${rel}deg)`;
@@ -693,7 +622,7 @@ function addFind() {
 }
 
 function addFindMarker(f) {
-  L.marker([f[0], f[1]], { icon: L.divIcon({ className: '', html: '<div class="findPin"></div>', iconSize: [18, 18] }), interactive: false, zIndexOffset: 800 }).addTo(tripLayer);
+  mv.addFind(f);
 }
 
 let findsCount = 0;
@@ -738,7 +667,7 @@ function leaveTripUi() {
   state.trip = null;
   clearInterval(state.hudTimer);
   releaseWakeLock();
-  tripLayer.clearLayers();
+  mv.setTrip(null);
   $('top').hidden = false;
   $('hud').hidden = true;
   $('actionsIdle').hidden = false;
@@ -858,6 +787,7 @@ function bindUi() {
     if (c.dataset.scope === state.scope) return;
     state.scope = c.dataset.scope;
     state.view.showAll = false;
+    state.view.spot = null; // tilbage til listen
     haptic('selection');
     state.animateList = true;
     store.setPrefs({ scope: state.scope });
@@ -902,16 +832,16 @@ function bindUi() {
   });
   $('btnLocate').addEventListener('click', () => {
     lastPan = 0;
-    if (state.me) focus(state.me, Math.max(map.getZoom(), 15));
+    if (state.me) focus(state.me, Math.max(mv.getZoom(), 15));
     else toast('Venter på din position – tillad placering for Safari');
     askCompass();
   });
   $('btnLayer').addEventListener('click', () => {
-    map.removeLayer(layers[layerName]);
     layerName = layerName === 'kort' ? 'foto' : 'kort';
-    layers[layerName].addTo(map);
-    map.getContainer().classList.toggle('foto', layerName === 'foto');
+    mv.setLayer(layerName);
+    $('map').classList.toggle('foto', layerName === 'foto');
     store.setPrefs({ layer: layerName });
+    haptic('selection');
   });
   $('btnNight').addEventListener('click', () => {
     const on = !document.body.classList.contains('night');
@@ -960,7 +890,7 @@ function openSpot(id) {
   renderPanel();
   const spot = state.spots.find((s) => s.id === id);
   const best = (state.best || []).find((b) => b.spot === spot);
-  focus(best ? best.pos : spot.center, Math.max(map.getZoom(), 14)); // zoom ind, så høfden og vejen kan ses
+  focus(best ? best.pos : spot.center, Math.max(mv.getZoom(), 14)); // zoom ind, så høfden og vejen kan ses
 }
 
 function switchTab(tab) {
@@ -1004,7 +934,7 @@ function fixViewport() {
     root.style.height = `${window.innerHeight + d}px`;
     root.style.setProperty('--gap', `${d}px`);
   }
-  if (typeof map !== 'undefined') map.invalidateSize();
+  if (typeof mv !== 'undefined') mv.resize();
   if ($('sheet').dataset.state) setSheet($('sheet').dataset.state);
   if ($('screenInfo')) $('screenInfo').textContent = screenInfo();
 }
@@ -1081,9 +1011,7 @@ function bindSheetDrag() {
 // Centrér et punkt i den synlige del af kortet (mellem toplinjen og bundarket)
 function focus(latlng, zoom) {
   const top = ($('hud').hidden ? $('top') : $('hud')).getBoundingClientRect().bottom;
-  const sheetH = $('sheet').offsetHeight;
-  map.setView(latlng, zoom ?? map.getZoom(), { animate: false });
-  map.panBy([0, Math.round((sheetH - top) / 2)], { animate: false });
+  mv.focus(latlng, zoom, top, $('sheet').offsetHeight);
 }
 
 function applyNight(on) {
