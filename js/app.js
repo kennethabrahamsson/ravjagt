@@ -744,6 +744,30 @@ function applyGap() {
 }
 applyGap();
 
+/* iOS-hjemmeskærmsapp: når tastaturet har været åbent (fx ved Airtable-nøglen eller en note), krymper
+   vinduet med ca. statuslinjens højde og vokser ikke igen – det giver en sort bar i bunden.
+   iOS måler forfra, hvis siden skjules og vises i samme øjeblik. Vi gør det kun, når vinduet er for kort. */
+let peakHeight = window.innerHeight;
+window.addEventListener('resize', () => { peakHeight = Math.max(peakHeight, window.innerHeight); });
+function viewportStuck() {
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  if (!standalone || window.innerWidth > window.innerHeight) return false;
+  return peakHeight - window.innerHeight > 4 || screen.height - window.innerHeight > 20;
+}
+function repairViewport() {
+  if (!viewportStuck()) return;
+  const body = document.body;
+  body.style.display = 'none';
+  void body.offsetHeight; // tving en ny måling uden at tegne imellem
+  body.style.display = '';
+  peakHeight = Math.max(peakHeight, window.innerHeight);
+  map.invalidateSize();
+  setSheet($('sheet').dataset.state);
+}
+document.addEventListener('focusout', (e) => { if (e.target.matches('input, textarea')) setTimeout(repairViewport, 150); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(repairViewport, 150); });
+window.addEventListener('pageshow', () => setTimeout(repairViewport, 300));
+
 function sheetHeights() {
   const sheet = $('sheet');
   const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;

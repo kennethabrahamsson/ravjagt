@@ -224,3 +224,5 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 html.standalone, html.standalone body { background: var(--panel-solid); }
 .scopeChip { flex: 1; min-width: 0; padding: 6px 0; border-radius: 99px; border: 1px solid var(--line); background: var(--raise); color: var(--mute); font-size: 13px; font-weight: 600; }
 .scopeChip[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+/* Hjemmeskærms-app: helt ensfarvet ark, så en eventuel iOS-bar i bunden glider i ét med det */
+html.standalone .sheet { background: var(--panel-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
