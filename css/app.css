@@ -22,8 +22,6 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-/* iOS 26: gør siden høj nok til, at kort og ark kan nå helt ned i hjemmeskærms-appen */
-@media (display-mode: standalone) { html { min-height: calc(100% + env(safe-area-inset-top, 0px)); } }
 html, body { height: 100%; margin: 0; background: var(--ink); color: var(--fg); font: 15px/1.4 var(--sans); overscroll-behavior: none; }
 body.night { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-38deg) brightness(0.62); }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
@@ -96,7 +94,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
   height: var(--sheet-h, 45vh); display: flex; flex-direction: column;
   background: var(--panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--line); border-radius: 22px 22px 0 0;
-  padding: 0 16px var(--safe-b); transition: height 0.3s ease; overflow: hidden;
+  padding: 0 16px max(var(--safe-b), 14px); transition: height 0.3s ease; overflow: hidden;
 }
 .sheet.dragging, .sheet.dragging ~ .fabs { transition: none; }
 .sheet.trip .timeline { display: none; }
