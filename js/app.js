@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 25; // samme nummer som cachen i sw.js
+const APP_VERSION = 26; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -586,6 +586,7 @@ async function startTrip() {
 function resumeTrip(t) {
   state.trip = t;
   enterTripUi();
+  focus(t.track.length ? [t.track[t.track.length - 1][0], t.track[t.track.length - 1][1]] : t.start, 15);
 }
 
 function enterTripUi() {
@@ -678,6 +679,7 @@ function openEnd() {
   const mins = Math.round((Date.now() - new Date(t.startedAt)) / 60000);
   $('endSummary').textContent = `${mins} min · ${distText(walked(t.track))} gået. Log også ture uden fund – de er lige så vigtige for modellen.`;
   $('endDlg').showModal();
+  document.activeElement?.blur(); // ingen knap skal have fokus fra start – første tryk skal virke
 }
 
 function finishTrip() {
