@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Ravjagt · kurvekort (prototype)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<style>
+  @font-face { font-family: "Outfit"; font-weight: 300 700; src: url("../vendor/fonts/outfit-latin.woff2") format("woff2"); }
+  html, body { height: 100%; margin: 0; background: #0a0a0b; color: #f5f5f2; font-family: -apple-system, system-ui, sans-serif; }
+  #map { position: fixed; inset: 0; }
+  .title { position: fixed; top: 0; left: 0; right: 0; padding: 22px 20px 40px; background: linear-gradient(180deg, rgba(10,10,11,.92), rgba(10,10,11,0)); pointer-events: none; }
+  .title small { font: 600 11px -apple-system, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #8e8e93; }
+  .title h1 { margin: 4px 0 0; font: 500 40px/1.04 "Outfit", sans-serif; letter-spacing: -.025em; }
+  .legend { position: fixed; left: 16px; bottom: 16px; display: flex; gap: 14px; font: 500 12px "Outfit", sans-serif; color: #8e8e93; background: rgba(20,20,22,.7); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 10px 14px; border-radius: 99px; }
+  .legend i { display: inline-block; width: 16px; height: 2px; vertical-align: middle; margin-right: 6px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="title"><small>Prototype · højde- og dybdekurver</small><h1>Søndervig</h1></div>
+<div class="legend"><span><i style="background:rgba(245,245,242,.45)"></i>Højde</span><span><i style="background:#5f8fb5"></i>Dybde</span><span><i style="background:#3ddc84"></i>Ravkyst</span></div>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-contour@0.1.1/dist/index.min.js"></script>
+<script>
+// Åben højdemodel (Terrarium, AWS) – dækker både land og havbund
+const dem = new mlcontour.DemSource({
+  url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+  encoding: 'terrarium', maxzoom: 13, worker: true,
+});
+dem.setupMaplibre(maplibregl);
+
+const map = new maplibregl.Map({
+  container: 'map',
+  center: [8.095, 56.095], zoom: 11.6, attributionControl: { compact: true },
+  style: {
+    version: 8,
+    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+    sources: {
+      omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+      dem: { type: 'raster-dem', tiles: [dem.sharedDemProtocolUrl], encoding: 'terrarium', tileSize: 256, maxzoom: 13 },
+      contours: {
+        type: 'vector', maxzoom: 15,
+        tiles: [dem.contourProtocolUrl({
+          // [mindre kurve, større kurve] i meter pr. zoomniveau – også negative (havbund)
+          thresholds: { 9: [10, 50], 10: [5, 20], 11: [2, 10], 12: [1, 5], 13: [1, 5] },
+          elevationKey: 'ele', levelKey: 'level', contourLayer: 'contours',
+        })],
+      },
+    },
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': '#111113' } },
+      { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': '#08080a' } },
+      { id: 'shade', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#000', 'hillshade-highlight-color': '#2a2a2e', 'hillshade-accent-color': '#000' } },
+      { id: 'roads', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 11, paint: { 'line-color': '#26262a', 'line-width': 0.8 } },
+      { id: 'depth', type: 'line', source: 'contours', 'source-layer': 'contours', filter: ['<', ['get', 'ele'], 0],
+        paint: { 'line-color': '#5f8fb5', 'line-opacity': ['match', ['get', 'level'], 1, 0.55, 0.25], 'line-width': ['match', ['get', 'level'], 1, 1, 0.6] } },
+      { id: 'height', type: 'line', source: 'contours', 'source-layer': 'contours', filter: ['>', ['get', 'ele'], 0],
+        paint: { 'line-color': '#f5f5f2', 'line-opacity': ['match', ['get', 'level'], 1, 0.4, 0.16], 'line-width': ['match', ['get', 'level'], 1, 0.9, 0.5] } },
+      { id: 'coastline', type: 'line', source: 'omt', 'source-layer': 'water', paint: { 'line-color': '#f5f5f2', 'line-opacity': 0.35, 'line-width': 0.8 } },
+      { id: 'depth-labels', type: 'symbol', source: 'contours', 'source-layer': 'contours', filter: ['all', ['<', ['get', 'ele'], 0], ['==', ['get', 'level'], 1]],
+        layout: { 'symbol-placement': 'line', 'text-field': ['concat', ['to-string', ['*', -1, ['get', 'ele']]], ' m'], 'text-font': ['Noto Sans Regular'], 'text-size': 10 },
+        paint: { 'text-color': '#5f8fb5', 'text-halo-color': '#08080a', 'text-halo-width': 1.5 } },
+      { id: 'places', type: 'symbol', source: 'omt', 'source-layer': 'place', minzoom: 9,
+        layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12 },
+        paint: { 'text-color': '#8e8e93', 'text-halo-color': '#0a0a0b', 'text-halo-width': 1.2 } },
+    ],
+  },
+});
+
+// Appens egne ravkyst-strækninger oven på, med glød – for at se kombinationen
+map.on('load', async () => {
+  const d = await fetch('../data/dk.json').then((r) => r.json());
+  const feats = d.segs.filter((s) => s.o).map((s, i) => ({ type: 'Feature', properties: { c: ['#3ddc84', '#ffc94d', '#ff5a4e'][i % 7 === 0 ? 1 : i % 5 === 0 ? 2 : 0] }, geometry: { type: 'LineString', coordinates: s.l.map(([la, lo]) => [lo, la]) } }));
+  map.addSource('coast', { type: 'geojson', data: { type: 'FeatureCollection', features: feats } });
+  map.addLayer({ id: 'coast-glow', type: 'line', source: 'coast', paint: { 'line-color': ['get', 'c'], 'line-width': 14, 'line-opacity': 0.18, 'line-blur': 6 } });
+  map.addLayer({ id: 'coast', type: 'line', source: 'coast', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-width': 4 } });
+});
+</script>
+</body>
+</html>
