@@ -313,7 +313,7 @@ function syncHtml() {
   if (state.syncing) line = 'Synkroniserer …';
   else if (state.syncResult && !state.syncResult.ok) line = `Ikke synket: ${state.syncResult.msg || 'ingen forbindelse'}${waiting ? ` · ${waiting} venter` : ''}`;
   else if (waiting) line = `${waiting} ${waiting === 1 ? 'ændring venter' : 'ændringer venter'} på net`;
-  else line = c.lastSync ? `Synket ${clock(c.lastSync)} · ${c.remoteCount ?? 0} ture i Airtable` : 'Klar';
+  else line = c.lastSync ? `Synket ${clock(c.lastSync)} · ${c.remoteCount ?? 0} ${c.remoteCount === 1 ? 'tur' : 'ture'} i basen “${c.baseName}”, tabellen “Ture”` : `Forbundet til basen “${c.baseName}”`;
   const ok = !waiting && (!state.syncResult || state.syncResult.ok);
   return `<div class="syncCard ${ok ? 'on' : 'warn2'}">
     <div><strong>${ok ? 'Gemt i Airtable' : 'Synkronisering'}</strong><span class="mute">${esc(line)}</span></div>

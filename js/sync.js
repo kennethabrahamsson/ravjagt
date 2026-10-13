@@ -7,6 +7,7 @@ import * as store from './store.js';
 
 const API = 'https://api.airtable.com/v0';
 const TABLE = 'Ture';
+const SCHEMA = 2; // hæves, når kolonnerne ændres, så telefonen opdaterer tabellen ved næste synk
 const CONF = 'ravjagt.airtable.v1';
 const RECS = 'ravjagt.records.v1'; // tur-id → Airtable-række-id
 
@@ -37,26 +38,26 @@ async function at(path, { method = 'GET', body, token = config()?.token } = {}) 
 const DT = { dateFormat: { name: 'european' }, timeFormat: { name: '24hour' }, timeZone: 'Europe/Copenhagen' };
 const NUM = (precision) => ({ type: 'number', options: { precision } });
 const FIELDS = [
-  { name: 'Tur', type: 'singleLineText' },
-  { name: 'Start', type: 'dateTime', options: DT },
-  { name: 'Minutter', ...NUM(0) },
-  { name: 'Fund', ...NUM(0) },
-  { name: 'UV-lygte', type: 'checkbox', options: { icon: 'check', color: 'greenBright' } },
-  { name: 'Note', type: 'multilineText' },
-  { name: 'Sted', type: 'singleLineText' },
-  { name: 'Farve', type: 'singleSelect', options: { choices: [{ name: 'Grøn', color: 'greenBright' }, { name: 'Gul', color: 'yellowBright' }, { name: 'Rød', color: 'redBright' }] } },
-  { name: 'Score', ...NUM(0) },
-  { name: 'Vind (m/s)', ...NUM(1) },
-  { name: 'Vindretning (°)', ...NUM(0) },
-  { name: 'Bølger (m)', ...NUM(1) },
-  { name: 'Vandstand (cm)', ...NUM(0) },
-  { name: 'Mørkt', type: 'checkbox', options: { icon: 'check', color: 'grayBright' } },
-  { name: 'Gået (m)', ...NUM(0) },
-  { name: 'Slut', type: 'dateTime', options: DT },
-  { name: 'Startpunkt', type: 'singleLineText' },
-  { name: 'Modelversion', type: 'singleLineText' },
-  { name: 'Tur-id', type: 'singleLineText' },
-  { name: 'Data', type: 'multilineText' },
+  { name: 'Tur', type: 'singleLineText', description: 'Dag, tidspunkt og sted – sat af appen' },
+  { name: 'Start', type: 'dateTime', options: DT, description: 'Hvornår du trykkede “Start tur her”' },
+  { name: 'Minutter', ...NUM(0), description: 'Turens længde' },
+  { name: 'Fund', ...NUM(0), description: 'Antal stykker rav. Kan rettes her – appen henter rettelsen' },
+  { name: 'UV-lygte', type: 'checkbox', options: { icon: 'check', color: 'greenBright' }, description: 'Brugte du UV-lygte? Kan rettes her' },
+  { name: 'Note', type: 'multilineText', description: 'Din note. Kan rettes her' },
+  { name: 'Sted', type: 'singleLineText', description: 'Nærmeste kyststrækning ved start' },
+  { name: 'Farve', type: 'singleSelect', options: { choices: [{ name: 'Grøn', color: 'greenBright' }, { name: 'Gul', color: 'yellowBright' }, { name: 'Rød', color: 'redBright' }] }, description: 'Hvad appen sagde ved start. Sammenlign med Fund for at se, om modellen rammer' },
+  { name: 'Score', ...NUM(0), description: 'Modellens score 0–100 ved start (grøn ≥ 55, gul ≥ 30)' },
+  { name: 'Vind (m/s)', ...NUM(1), description: 'Middelvind ved start (Open-Meteo)' },
+  { name: 'Vindretning (°)', ...NUM(0), description: 'Hvor vinden kom fra. 270 = vest' },
+  { name: 'Bølger (m)', ...NUM(1), description: 'Bølgehøjde ud for kysten ved start' },
+  { name: 'Vandstand (cm)', ...NUM(0), description: 'Modelleret vandstand. Negativ = lavvande' },
+  { name: 'Mørkt', type: 'checkbox', options: { icon: 'check', color: 'grayBright' }, description: 'Var det mørkt ved start?' },
+  { name: 'Gået (m)', ...NUM(0), description: 'Hvor langt du gik ifølge GPS' },
+  { name: 'Slut', type: 'dateTime', options: DT, description: 'Hvornår du afsluttede turen' },
+  { name: 'Startpunkt', type: 'singleLineText', description: 'Breddegrad, længdegrad hvor du startede' },
+  { name: 'Modelversion', type: 'singleLineText', description: 'Hvilken version af modellen der gav farven' },
+  { name: 'Tur-id', type: 'singleLineText', description: 'Appens id – rør ikke' },
+  { name: 'Data', type: 'multilineText', description: 'Hele turen inkl. GPS-spor og fund-positioner som JSON – rør ikke' },
 ];
 
 async function ensureTable(baseId, token) {
@@ -72,10 +73,13 @@ async function ensureTable(baseId, token) {
     }
     return;
   }
-  const have = new Set(table.fields.map((f) => f.name));
+  // Eksisterende tabel: tilføj manglende kolonner og hold forklaringerne opdaterede
+  const have = new Map(table.fields.map((f) => [f.name, f]));
   for (const f of FIELDS) {
-    if (have.has(f.name)) continue;
-    await at(`/meta/bases/${baseId}/tables/${table.id}/fields`, { method: 'POST', token, body: f });
+    const cur = have.get(f.name);
+    if (!cur) await at(`/meta/bases/${baseId}/tables/${table.id}/fields`, { method: 'POST', token, body: f });
+    else if ((cur.description || '') !== f.description) await at(`/meta/bases/${baseId}/tables/${table.id}/fields/${cur.id}`, { method: 'PATCH', token, body: { description: f.description } });
+    else continue;
     await pause(250);
   }
 }
@@ -96,7 +100,7 @@ export async function setUp(rawToken) {
   try { await ensureTable(base.id, token); } catch (e) {
     return { ok: false, msg: `Kunne ikke oprette tabellen "Ture". ${e.message}` };
   }
-  write(CONF, { token, baseId: base.id, baseName: base.name });
+  write(CONF, { token, baseId: base.id, baseName: base.name, schema: SCHEMA });
   return { ok: true, baseName: base.name };
 }
 
@@ -115,6 +119,10 @@ async function doSync() {
     const queued = new Set(store.outbox().map((x) => x.id));
     for (const t of store.trips()) if (!known[t.id] && !queued.has(t.id)) store.setOutbox([...store.outbox(), { op: 'put', id: t.id }]);
 
+    if (config().schema !== SCHEMA) {
+      await ensureTable(config().baseId, config().token);
+      write(CONF, { ...config(), schema: SCHEMA });
+    }
     await flushOutbox();
     const pulled = await pull();
     write(CONF, { ...config(), lastSync: Date.now(), remoteCount: pulled.remoteCount });
