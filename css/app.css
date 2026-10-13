@@ -567,3 +567,15 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 .primary { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px rgba(255, 170, 40, 0.22); }
 .knob { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(255, 170, 40, 0.3); }
 .scopes .thumb { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 3px 10px rgba(255, 170, 40, 0.2); }
+
+/* Bundarket: fast rytme mellem elementerne, ingen knækkede filtertekster, ingen tekst oven i pilene */
+:root { --sheet-gap: 22px; }
+.grab { padding: 10px 0 14px; }
+.scopes { margin: 0 0 var(--sheet-gap); }
+.timeline { padding-bottom: var(--sheet-gap); }
+.actions { padding-bottom: var(--sheet-gap); }
+.tabs { margin-bottom: var(--sheet-gap); }
+.scopeChip { white-space: nowrap; font-size: 13.5px; padding: 9px 2px; overflow: hidden; text-overflow: ellipsis; }
+.slideLabel { position: absolute; left: 64px; right: 52px; text-align: center; padding: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chev { right: 20px; }
+@media (max-width: 380px) { .scopeChip { font-size: 12.5px; } .slideLabel { font-size: 15px; } }
