@@ -12,7 +12,7 @@ const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
   spots: [], open: [], points: [], trapLines: [], weather: null, nowIdx: 0, selIdx: 0, ready: false,
-  me: null, heading: null, scope: store.prefs().scope || 'near',
+  me: null, heading: null, scope: ['near', 'west', 'east', 'view'].includes(store.prefs().scope) ? store.prefs().scope : 'near',
   view: { tab: 'steder', spot: null, showAll: false },
   trip: null, watchId: null, wakeLock: null,
 };
@@ -60,6 +60,8 @@ function installDemoGps() {
 
 async function init() {
   $('modelVersion').textContent = MODEL_VERSION;
+  const sa = (side) => { const d = document.createElement('div'); d.style.cssText = `position:fixed;height:env(safe-area-inset-${side});`; document.body.append(d); const h = d.offsetHeight; d.remove(); return h; };
+  $('screenInfo').textContent = `Skærm ${screen.width}×${screen.height} · side ${window.innerWidth}×${window.innerHeight} · top ${sa('top')} · bund ${sa('bottom')} · ekstra ${iosGap()} · ${navigator.standalone ? 'hjemmeskærm' : 'browser'}`;
   applyNight(store.prefs().night);
   bindUi();
   setSheet('peek');
@@ -118,6 +120,7 @@ function scopeSpots() {
     if (near.length) return near;
     scope = 'view';
   }
+  if (scope === 'west' || scope === 'east') { const r = scope === 'west' ? 'v' : 'o'; return state.open.filter((s) => s.region === r); }
   if (scope === 'view') {
     const b = map.getBounds();
     const inView = state.open.filter((s) => b.contains(s.center));
@@ -127,7 +130,8 @@ function scopeSpots() {
 }
 function scopeLabel() {
   if (state.scope === 'near' && state.me && state.open.some((s) => distance(state.me, s.center) < NEAR_KM * 1000)) return `inden for ${NEAR_KM} km`;
-  if (state.scope === 'all') return 'i hele landet';
+  if (state.scope === 'west') return 'i Vest';
+  if (state.scope === 'east') return 'i Øst';
   return 'på kortet';
 }
 
@@ -259,7 +263,7 @@ function renderPanel() {
 
 function scopeChips() {
   const chip = (key, label) => `<button class="scopeChip" data-scope="${key}" aria-pressed="${state.scope === key}">${label}</button>`;
-  return `<div class="scopes">${chip('near', `Nær mig`)}${chip('view', 'Kortudsnit')}${chip('all', 'Hele landet')}</div>`;
+  return `<div class="scopes">${chip('near', 'Nær mig')}${chip('west', 'Vest')}${chip('east', 'Øst')}${chip('view', 'Kortet')}</div>`;
 }
 
 function spotListHtml() {
@@ -301,6 +305,14 @@ function spotDetailHtml(id) {
     <p class="mute">Kysten vender mod ${compass(spot.normal, true)} med ${maxFetch >= 250 ? 'åbent hav' : `op til ${maxFetch} km åbent vand`} foran.${lows.length ? ` Lavvande ${lows.join(' og ')} (model).` : ''}</p>
     <a class="linkbtn" href="https://maps.apple.com/?daddr=${lat},${lon}&dirflg=d" target="_blank" rel="noopener">Vis vej i Kort</a>
   </div>`;
+}
+
+// Zoom kortet ind på en landsdel, så den fylder den synlige del mellem toplinje og bundark
+function fitSpots(spots) {
+  if (!spots.length) return;
+  const b = L.latLngBounds(spots.map((s) => s.center));
+  const top = $('top').getBoundingClientRect().bottom;
+  map.fitBounds(b, { paddingTopLeft: [16, top + 12], paddingBottomRight: [60, $('sheet').offsetHeight + 12] });
 }
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
@@ -631,7 +643,7 @@ function bindUi() {
     state.view.showAll = false;
     store.setPrefs({ scope: state.scope });
     if (state.scope === 'near' && state.me) focus(state.me, 11);
-    if (state.scope === 'all') map.fitBounds(DK);
+    if (state.scope === 'west' || state.scope === 'east') fitSpots(scopeSpots());
     state._top = topScores();
     renderVerdict(); renderTimeline(); renderPanel();
   });
@@ -701,13 +713,24 @@ function switchTab(tab) {
 }
 
 /* Bundarket: sammenfoldet (tidslinje + knap), halvt eller næsten helt op. Træk eller tryk. */
+/* iPhone-hjemmeskærmsapps: Safari giver nogle gange siden en viewport, der er statuslinje + hjemmestreg
+   kortere end skærmen, så der bliver en tom bar i bunden. Vi måler forskellen og strækker kort og ark ned. */
+function iosGap() {
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  const portrait = window.innerWidth < window.innerHeight;
+  const gap = standalone && portrait ? screen.height - window.innerHeight : 0;
+  return gap > 20 && gap < 160 ? gap : 0;
+}
+function applyGap() { document.documentElement.style.setProperty('--gap', `${iosGap()}px`); }
+applyGap();
+
 function sheetHeights() {
   const sheet = $('sheet');
   const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
   const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight;
   const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
   const peek = $('grab').offsetHeight + tl + actions + safe + 2;
-  const vh = window.innerHeight;
+  const vh = window.innerHeight + iosGap();
   return { peek, mid: Math.max(peek + 120, Math.round(vh * 0.5)), max: Math.round(vh * 0.86) };
 }
 
@@ -753,7 +776,7 @@ function bindSheetDrag() {
   };
   grab.addEventListener('pointerup', end);
   grab.addEventListener('pointercancel', end);
-  window.addEventListener('resize', () => setSheet(sheet.dataset.state));
+  window.addEventListener('resize', () => { applyGap(); setSheet(sheet.dataset.state); map.invalidateSize(); });
 }
 
 // Centrér et punkt i den synlige del af kortet (mellem toplinjen og bundarket)

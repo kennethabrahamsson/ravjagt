@@ -21,7 +21,7 @@ export async function loadCoast() {
   const d = await fetch('data/dk.json').then((r) => r.json());
   const spots = d.segs.map((s, i) => ({
     id: `s${i}`, name: s.n, center: s.c, normal: s.nm, fetch: s.f, open: !!s.o,
-    traps: s.t, point: s.p, line: s.l,
+    traps: s.t, point: s.p, line: s.l, region: s.r,
   }));
   return { spots, points: d.points, trapLines: d.traps, openKm: d.openKm };
 }

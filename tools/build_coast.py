@@ -77,7 +77,16 @@ log('kædede linjer', len(lines))
 
 # ---------- 2. strækninger ----------
 segs = []
+def region(line):
+    # Vest = Jylland (fastlandet er den eneste åbne linje – den fortsætter ind i Tyskland)
+    # samt øer vest for 10° eller nord for 56,6° (Fanø, Rømø, Mandø, Læsø, Anholt).
+    # Øst = Sjælland, Fyn, Lolland-Falster, Møn, Bornholm og de andre øer.
+    if dist(line[0], line[-1]) > 5: return 'v'
+    lat = sum(p[0] for p in line) / len(line); lon = sum(p[1] for p in line) / len(line)
+    return 'v' if lon < 10.0 or lat > 56.6 else 'o'
+
 for line in lines:
+    reg = region(line)
     line = simplify(line, 25)
     cum = [0.0]
     for a, b in zip(line, line[1:]): cum.append(cum[-1] + dist(a, b))
@@ -105,7 +114,7 @@ for line in lines:
         a, b = at(wrap((d0+d1)/2 - 1700)), at(wrap((d0+d1)/2 + 1700))
         if dist(a, b) < 300: a, b = pts[0], pts[-1]
         normal = (bearing(a, b) + 90) % 360
-        segs.append({'mid': mid, 'pts': simplify(pts, 15), 'normal': normal})
+        segs.append({'mid': mid, 'pts': simplify(pts, 15), 'normal': normal, 'r': reg})
 log('strækninger', len(segs))
 
 # ---------- 3. raster til fetch ----------
@@ -246,6 +255,7 @@ out = {
     'segs': [{
         'n': s['name'], 'c': [round(s['mid'][0], 5), round(s['mid'][1], 5)], 'nm': round(s['normal']),
         'f': s['fetch'], 'o': 1 if s['open'] >= OPEN_KM else 0, 't': s.get('traps', 0), 'p': s['p'],
+        'r': s['r'],
         'l': [[round(p[0], 5), round(p[1], 5)] for p in s['pts']],
     } for s in segs],
     'traps': trap_lines,
