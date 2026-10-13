@@ -1,0 +1,7 @@
+// Signering med Xcodes gratis "Personal Team": appen kan installeres på din egen iPhone, men profilen udløber
+// efter 7 dage – kør `make device` igen. Team-id står kun i Local.xcconfig, som ikke er i git.
+PRODUCT_BUNDLE_IDENTIFIER = dk.kennethabrahamsson.ravjagt
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

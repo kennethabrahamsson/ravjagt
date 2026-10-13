@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 23; // samme nummer som cachen i sw.js
+const APP_VERSION = 24; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -45,7 +45,37 @@ const bestLayer = L.layerGroup().addTo(map);
 let meMarker = null, meCircle = null, homeLine = null, trackLine = null;
 
 /* ---------- Opstart ---------- */
-if (new URLSearchParams(location.search).has('demo')) installDemoGps();
+// Inde i den native iPhone-app kommer GPS'en fra appen – også i baggrunden under en tur
+const NATIVE = !!(window.ravNative && window.webkit?.messageHandlers?.rav);
+const native = (cmd) => { try { window.webkit.messageHandlers.rav.postMessage({ cmd }); } catch {} };
+if (NATIVE) installNativeGps();
+else if (new URLSearchParams(location.search).has('demo')) installDemoGps();
+
+// Erstatter browserens GPS med appens. Positioner fra baggrunden kommer samlet, når appen er fremme igen.
+function installNativeGps() {
+  const watchers = new Set();
+  let last = null;
+  const toPos = (f) => ({ coords: { latitude: f.lat, longitude: f.lon, accuracy: f.acc }, timestamp: f.t });
+  window.__ravFixes = (fixes) => {
+    if (!fixes.length) return;
+    // Alle undtagen den sidste lægges kun i sporet; den sidste opdaterer kort, pil og lager én gang
+    if (state.trip) for (const f of fixes.slice(0, -1)) addTrackPoint(toPos(f));
+    last = toPos(fixes[fixes.length - 1]);
+    watchers.forEach((cb) => cb(last));
+  };
+  window.__ravHeading = (h) => { state.heading = h; };
+  const geo = {
+    watchPosition: (ok) => { watchers.add(ok); if (last) ok(last); return ok; },
+    clearWatch: (id) => watchers.delete(id),
+    getCurrentPosition: (ok, fail) => {
+      if (last && Date.now() - last.timestamp < 15000) return ok(last);
+      const once = (p) => { watchers.delete(once); ok(p); };
+      watchers.add(once);
+      setTimeout(() => { if (watchers.delete(once)) (last ? ok(last) : fail?.()); }, 15000);
+    },
+  };
+  Object.defineProperty(navigator, 'geolocation', { value: geo, configurable: true });
+}
 init();
 
 // ?demo: en simuleret gåtur ved Søndervig, så appen kan afprøves uden at stå på stranden
@@ -82,6 +112,7 @@ async function init() {
   const resumed = store.activeTrip();
   if (resumed) resumeTrip(resumed);
   startLocating();
+  if (NATIVE) { $('btnPocket').hidden = true; native('ready'); }
   runSync();
   // Vis vejret fra sidst med det samme, og hent nyt i baggrunden
   const cached = cachedWeather(state.points);
@@ -543,6 +574,7 @@ function resumeTrip(t) {
 }
 
 function enterTripUi() {
+  if (NATIVE) native('startTrip');
   const t = state.trip;
   $('top').hidden = true;
   $('hud').hidden = false;
@@ -561,16 +593,25 @@ function enterTripUi() {
   state.hudTimer = setInterval(updateHud, 1000);
 }
 
-function onTripPosition(pos) {
+// Lægger et punkt i sporet (brug positionens eget tidspunkt – punkter fra baggrunden kommer senere)
+function addTrackPoint(pos) {
   const t = state.trip;
   const p = [pos.coords.latitude, pos.coords.longitude];
+  const ts = pos.timestamp || Date.now();
   const last = t.track[t.track.length - 1];
+  if (ts <= last[2]) return false;
   const moved = distance([last[0], last[1]], p);
-  if (pos.coords.accuracy < 50 && (moved > 8 || Date.now() - last[2] > 20000)) {
-    t.track.push([+p[0].toFixed(6), +p[1].toFixed(6), Date.now()]);
-    trackLine.setLatLngs(trackParts(t.track));
-    store.setActiveTrip(t);
+  if (pos.coords.accuracy < 50 && (moved > 8 || ts - last[2] > 20000)) {
+    t.track.push([+p[0].toFixed(6), +p[1].toFixed(6), ts]);
+    return true;
   }
+  return false;
+}
+
+function onTripPosition(pos) {
+  addTrackPoint(pos);
+  trackLine.setLatLngs(trackParts(state.trip.track));
+  store.setActiveTrip(state.trip);
   updateHud();
 }
 
@@ -647,6 +688,7 @@ function discardTrip() {
 }
 
 function leaveTripUi() {
+  if (NATIVE) native('stopTrip');
   store.setActiveTrip(null);
   state.trip = null;
   clearInterval(state.hudTimer);
@@ -717,6 +759,7 @@ function getPosition() {
 /* Kompas: iOS kræver tilladelse fra et tryk */
 let compassOn = false;
 async function askCompass() {
+  if (NATIVE) return; // kompasretningen kommer fra appen
   if (compassOn) return;
   try {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -880,7 +923,7 @@ function fixViewport() {
 }
 function screenInfo() {
   const sa = (side) => { const el = document.createElement('div'); el.style.cssText = `position:fixed;visibility:hidden;height:env(safe-area-inset-${side})`; document.body.append(el); const h = el.offsetHeight; el.remove(); return h; };
-  return `App v${APP_VERSION} · Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse: ${lastFix} · ${isStandalone() ? 'hjemmeskærm' : 'browser'}`;
+  return `App v${APP_VERSION} · Skærm ${screen.width}×${screen.height} · vindue ${window.innerHeight} · dokument ${document.documentElement.clientHeight} · top ${sa('top')} · bund ${sa('bottom')} · rettelse: ${lastFix} · ${NATIVE ? 'iPhone-app' : isStandalone() ? 'hjemmeskærm' : 'browser'}`;
 }
 fixViewport();
 for (const ev of ['resize', 'orientationchange', 'pageshow']) window.addEventListener(ev, () => setTimeout(fixViewport, 100));

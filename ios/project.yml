@@ -1,0 +1,44 @@
+# Ravjagt til iPhone: en native skal om web-appen (https://kennethabrahamsson.github.io/ravjagt/).
+# Den native del står for GPS – også i baggrunden med slukket skærm under en tur. Resten er web-appen.
+# Generér projektet med `make gen` (xcodegen). Projektfilen er ikke i git.
+name: Ravjagt
+options:
+  bundleIdPrefix: dk.kennethabrahamsson
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    GENERATE_INFOPLIST_FILE: NO
+targets:
+  Ravjagt:
+    type: application
+    platform: iOS
+    sources: [App]
+    configFiles:
+      Debug: Signing.xcconfig
+      Release: Signing.xcconfig
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Ravjagt
+        CFBundleName: Ravjagt
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen:
+          UIColorName: Ink
+        UIBackgroundModes: [location]
+        NSLocationWhenInUseUsageDescription: Ravjagt bruger din position til at vise kysten nær dig og til at spore din tur, så du altid kan finde tilbage til, hvor du startede.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Under en tur sporer Ravjagt dig også med slukket skærm, så sporet og vejen tilbage er rigtige, mens telefonen ligger i lommen.
+        # Web-appens domæne: giver service worker (offline) inde i appen
+        WKAppBoundDomains: [kennethabrahamsson.github.io]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIViewControllerBasedStatusBarAppearance: false
+        UIRequiresFullScreen: true
+        ITSAppUsesNonExemptEncryption: false

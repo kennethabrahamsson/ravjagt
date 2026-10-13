@@ -2,3 +2,6 @@
 node_modules/
 .vercel
 tools/cache/
+ios/Local.xcconfig
+ios/.build/
+ios/*.xcodeproj/
