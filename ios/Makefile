@@ -33,7 +33,7 @@ install:
 	udid=$${DEVICE:-$$(python3 -c "import json; d=json.load(open('.build/devices.json'))['result']['devices']; print(next((x['identifier'] for x in d if x['hardwareProperties'].get('reality') == 'physical' and x['connectionProperties'].get('pairingState') == 'paired'), ''))")}; \
 	test -n "$$udid" || { echo "Ingen parret iPhone fundet – sæt telefonen til, lås den op og tryk Stol på"; exit 1; }; \
 	xcrun devicectl device install app --device $$udid .build/dd/Build/Products/Release-iphoneos/Ravjagt.app && \
-	xcrun devicectl device process launch --device $$udid $(BUNDLE)
+	{ xcrun devicectl device process launch --device $$udid $(BUNDLE) >/dev/null 2>&1 && echo "Installeret og startet." || echo "Installeret – telefonen var låst, så åbn Ravjagt selv."; }
 
 clean:
 	rm -rf .build Ravjagt.xcodeproj
