@@ -136,8 +136,11 @@ function scopeLabel() {
 }
 
 /* ---------- Render ---------- */
+function renderScopes() { $('scopes').innerHTML = scopeChips(); }
+
 function renderAll() {
   if (!state.ready) return;
+  renderScopes();
   state._top = topScores();
   renderVerdict();
   renderTimeline();
@@ -263,7 +266,7 @@ function renderPanel() {
 
 function scopeChips() {
   const chip = (key, label) => `<button class="scopeChip" data-scope="${key}" aria-pressed="${state.scope === key}">${label}</button>`;
-  return `<div class="scopes">${chip('near', 'Nær mig')}${chip('west', 'Vest')}${chip('east', 'Øst')}${chip('view', 'Kortet')}</div>`;
+  return `${chip('near', 'Nær mig')}${chip('west', 'Vest')}${chip('east', 'Øst')}${chip('view', 'Kortet')}`;
 }
 
 function spotListHtml() {
@@ -280,7 +283,7 @@ function spotListHtml() {
       <span class="spotDist">${d != null ? distText(d) : ''}</span>
     </button>`).join('');
   const label = state.selIdx === state.nowIdx ? 'Bedst lige nu' : `Bedst ${timeLabel(state.weather.series[0].time[state.selIdx])}`;
-  return `${scopeChips()}${note}<div class="sectionLabel">${label} · ${list.length} strækninger</div><div class="list">${rows}</div>
+  return `${note}<div class="sectionLabel">${label} · ${list.length} strækninger</div><div class="list">${rows}</div>
     ${list.length > 8 ? `<button class="more" data-act="all">${state.view.showAll ? 'Vis færre' : `Vis alle ${list.length}`}</button>` : ''}`;
 }
 
@@ -636,16 +639,17 @@ function bindUi() {
     if (a.dataset.act === 'back') { state.view.spot = null; renderPanel(); }
     if (a.dataset.act === 'all') { state.view.showAll = !state.view.showAll; renderPanel(); }
   });
-  $('tab-steder').addEventListener('click', (e) => {
+  $('scopes').addEventListener('click', (e) => {
     const c = e.target.closest('[data-scope]');
     if (!c) return;
     state.scope = c.dataset.scope;
     state.view.showAll = false;
     store.setPrefs({ scope: state.scope });
     if (state.scope === 'near' && state.me) focus(state.me, 11);
-    if (state.scope === 'west' || state.scope === 'east') fitSpots(scopeSpots());
+    // Bornholm tæller med i Øst, men kortet zoomer på Sjælland og øerne, så de ikke bliver små
+    if (state.scope === 'west' || state.scope === 'east') fitSpots(scopeSpots().filter((x) => x.center[1] < 13.5));
     state._top = topScores();
-    renderVerdict(); renderTimeline(); renderPanel();
+    renderScopes(); renderVerdict(); renderTimeline(); renderPanel();
   });
   $('tab-ture').addEventListener('click', (e) => {
     const a = e.target.closest('[data-act]');
@@ -729,14 +733,17 @@ function applyGap() {
   const probe = document.createElement('div');
   probe.style.cssText = 'position:fixed;top:0;height:env(safe-area-inset-top);visibility:hidden';
   document.body.append(probe); safeTop = probe.offsetHeight; probe.remove();
-  document.documentElement.style.setProperty('--gap', `${iosGap()}px`);
+  // iOS 26 tegner ikke i området under det for korte vindue, så vi flytter intet derned.
+  // I stedet får bunden samme farve som bundarket (se CSS og manifest), så det glider sammen.
+  document.documentElement.style.setProperty('--gap', '0px');
+  document.documentElement.classList.toggle('standalone', !!(navigator.standalone || matchMedia('(display-mode: standalone)').matches));
 }
 applyGap();
 
 function sheetHeights() {
   const sheet = $('sheet');
   const safe = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
-  const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight;
+  const tl = sheet.classList.contains('trip') ? 0 : $('timeline').offsetHeight + $('scopes').offsetHeight;
   const actions = ($('actionsTrip').hidden ? $('actionsIdle') : $('actionsTrip')).offsetHeight;
   const peek = $('grab').offsetHeight + tl + actions + safe + 2;
   const vh = window.innerHeight + iosGap();

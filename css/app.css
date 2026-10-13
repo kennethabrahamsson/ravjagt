@@ -220,6 +220,9 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
 input, textarea { -webkit-user-select: text; user-select: text; }
 
 /* Filter: nær mig / kortudsnit / hele landet */
-.scopes { display: flex; gap: 6px; margin: 2px 0 10px; }
-.scopeChip { flex: 1; min-width: 0; padding: 7px 0; border-radius: 99px; border: 1px solid var(--line); background: var(--raise); color: var(--mute); font-size: 13px; font-weight: 600; }
+.scopes { display: flex; gap: 6px; margin: 0 0 10px; }
+.sheet.trip .scopes { display: none; }
+/* iOS 26 afskærer bunden af hjemmeskærms-appen; giv den samme farve som bundarket */
+html.standalone, html.standalone body { background: var(--panel-solid); }
+.scopeChip { flex: 1; min-width: 0; padding: 6px 0; border-radius: 99px; border: 1px solid var(--line); background: var(--raise); color: var(--mute); font-size: 13px; font-weight: 600; }
 .scopeChip[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
