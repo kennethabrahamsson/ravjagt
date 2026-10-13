@@ -22,6 +22,8 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* iOS 26: gør siden høj nok til, at kort og ark kan nå helt ned i hjemmeskærms-appen */
+@media (display-mode: standalone) { html { min-height: calc(100% + env(safe-area-inset-top, 0px)); } }
 html, body { height: 100%; margin: 0; background: var(--ink); color: var(--fg); font: 15px/1.4 var(--sans); overscroll-behavior: none; }
 body.night { filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-38deg) brightness(0.62); }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }

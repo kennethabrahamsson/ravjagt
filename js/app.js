@@ -715,13 +715,22 @@ function switchTab(tab) {
 /* Bundarket: sammenfoldet (tidslinje + knap), halvt eller næsten helt op. Træk eller tryk. */
 /* iPhone-hjemmeskærmsapps: Safari giver nogle gange siden en viewport, der er statuslinje + hjemmestreg
    kortere end skærmen, så der bliver en tom bar i bunden. Vi måler forskellen og strækker kort og ark ned. */
+// iOS 26-fejl: siden bliver ca. statuslinjens højde for kort. Vi flytter kun med det stykke,
+// og kun når fejlen faktisk er der (Apple har delvist rettet den i Safari 26.1).
+let safeTop = 0;
 function iosGap() {
   const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
-  const portrait = window.innerWidth < window.innerHeight;
-  const gap = standalone && portrait ? screen.height - window.innerHeight : 0;
-  return gap > 20 && gap < 160 ? gap : 0;
+  if (!standalone || window.innerWidth > window.innerHeight) return 0;
+  const missing = screen.height - window.innerHeight;
+  if (missing < 20 || missing > 160) return 0;
+  return safeTop ? Math.min(missing, safeTop) : missing;
 }
-function applyGap() { document.documentElement.style.setProperty('--gap', `${iosGap()}px`); }
+function applyGap() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;height:env(safe-area-inset-top);visibility:hidden';
+  document.body.append(probe); safeTop = probe.offsetHeight; probe.remove();
+  document.documentElement.style.setProperty('--gap', `${iosGap()}px`);
+}
 applyGap();
 
 function sheetHeights() {
