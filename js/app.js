@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#43d17f', yellow: '#f2c14e', red: '#e5574f' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 17; // samme nummer som cachen i sw.js
+const APP_VERSION = 18; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -101,10 +101,12 @@ async function refreshWeather(force = false) {
     useWeather(await fetchWeather(state.points));
   } catch (err) {
     state.weatherError = err.message;
+    clearTimeout(state.retryTimer);
+    state.retryTimer = setTimeout(() => refreshWeather(true), 2 * 60 * 1000); // prøv selv igen om 2 min
     if (state.ready) { renderVerdict(); return; }
     $('vDot').className = 'dot red';
     $('vTitle').textContent = 'Kunne ikke hente vejret';
-    $('vSub').innerHTML = `${esc(err.message)} · <button class="retry" id="btnRetry">Prøv igen</button>`;
+    $('vSub').innerHTML = `${esc(err.message)} – prøver igen om 2 min · <button class="retry" id="btnRetry">Prøv nu</button>`;
     $('btnRetry').onclick = () => { $('vTitle').textContent = 'Henter vejret …'; $('vSub').textContent = 'Et øjeblik'; refreshWeather(true); };
   }
 }

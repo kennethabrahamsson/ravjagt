@@ -68,7 +68,8 @@ async function getJson(url) {
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     const r = await fetch(url, { signal: ctrl.signal });
-    if (!r.ok) throw new Error(`Open-Meteo svarede ${r.status}`);
+    if (r.status === 429) throw new Error('Vejrtjenesten har for travlt lige nu');
+    if (!r.ok) throw new Error(`Vejrtjenesten svarede med fejl ${r.status}`);
     return await r.json();
   } catch (e) {
     throw new Error(e.name === 'AbortError' ? 'Vejrtjenesten svarede ikke inden for 20 sekunder' : e.message || 'Ingen forbindelse');
