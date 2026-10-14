@@ -604,3 +604,10 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 .windLabel { font: 600 10px var(--sans); letter-spacing: 0.04em; color: var(--mute); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); white-space: nowrap; }
 .windLabel.ok { color: var(--go); } .windLabel.hard { color: var(--no); }
 .now { margin-top: 2px; }
+
+/* Række under søjlerne: kan stranden gås? Rød = dækket, grøn = storm for nylig, grå = intet nyt */
+.beach { display: flex; gap: 2px; margin-top: -1px; }
+.beach span { width: 8px; height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.16); }
+.beach .ok { background: var(--go); }
+.beach .hard { background: var(--no); }
+.beach .past { opacity: 0.3; }

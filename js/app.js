@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 39; // samme nummer som cachen i sw.js
+const APP_VERSION = 40; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -259,8 +259,8 @@ function windInfo(i = state.selIdx) {
   else if (on < -2.5 && -on >= Math.abs(al) * 0.6) kind = 'fra';
   const wave = w.wave[i], sl = w.sl[i];
   // Kan man gå på stranden nu? Og har en storm bragt noget ind de sidste 1–3 døgn?
-  const blocked = on > 7 || ws > 12 || (sl != null && wave != null && sl > 0.3 && wave >= 1.8);
   const f = score(spot, i).f;
+  const blocked = f.blocked;
   const storm = f.peak >= 8 && f.peakAge != null && f.peakAge <= 72 ? { ws: f.peak, age: f.peakAge } : null;
   const status = blocked ? 'hard' : storm ? 'ok' : 'quiet';
   return { spot, ws, wd, on, kind, wave, sl, status, storm };
@@ -349,6 +349,8 @@ function renderTimeline() {
   const n = s0.time.length;
   const start = Math.max(0, state.nowIdx - 6);
   const top = state._top || (state._top = topScores());
+  const beach = (i) => windInfo(i)?.status || 'quiet';
+  const BEACH = { hard: 'stranden er dækket', ok: 'kan gås, storm for nylig', quiet: 'kan gås, intet nyt' };
   const groups = new Map();
   for (let i = start; i < n; i++) {
     const day = s0.time[i].slice(0, 10);
@@ -360,12 +362,15 @@ function renderTimeline() {
     const d = new Date(`${day}T12:00`);
     const isToday = day === s0.time[state.nowIdx].slice(0, 10);
     html.push(`<div class="day"><div class="dayLabel">${isToday ? '<b>I dag</b>' : `${DAYS[d.getDay()]} ${d.getDate()}.`}</div><div class="hours">`);
+    const strip = [];
     for (const i of idxs) {
       const lvl = levelOf(top[i]);
+      const b = beach(i);
+      strip.push(`<span class="${b}${i < state.nowIdx ? ' past' : ''}" data-i="${i}"></span>`);
       const cls = ['h', lvl, s0.isDay[i] === 0 ? 'dark' : '', i === state.selIdx ? 'sel' : '', i < state.nowIdx ? 'past' : ''].join(' ');
-      html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}"><i style="height:${Math.max(10, top[i])}%;--d:${Math.min(i - start, 40) * 8}ms"></i></button>`);
+      html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}, ${BEACH[b]}"><i style="height:${Math.max(10, top[i])}%;--d:${Math.min(i - start, 40) * 8}ms"></i></button>`);
     }
-    html.push('</div></div>');
+    html.push(`</div><div class="beach" aria-hidden="true">${strip.join('')}</div></div>`);
   }
   el.innerHTML = html.join('');
   el.classList.remove('grow'); void el.offsetWidth; el.classList.add('grow');

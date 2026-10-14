@@ -92,6 +92,10 @@ export function scoreAt(w, i, spot, brief = false) {
   let score = Math.round(100 * clamp(storm * timing * trapF + tide * (storm > 0.15 ? 1 : 0.3)));
   const dark = w.isDay?.[i] === 0;
   if (!dark) score = Math.min(54, Math.round(score * 0.65));
+  // Brænding og højvande over tanglinjen: aldrig grøn, uanset hvad der er kommet ind
+  const wave = w.wave[i];
+  const blocked = onNow > 7 || w.ws[i] > 12 || (sl != null && wave != null && sl > 0.3 && wave >= 1.8);
+  if (blocked) score = Math.min(score, 50);
   if (brief) return score;
 
   const reasons = [];
@@ -99,7 +103,8 @@ export function scoreAt(w, i, spot, brief = false) {
     reasons.push(rawPeakAge === 0 ? `Pålandsvind ${fmt(rawPeak)} m/s lige nu` : `Pålandsvind op til ${fmt(rawPeak)} m/s for ${ageText(rawPeakAge)} siden`);
   } else reasons.push('Ingen kraftig pålandsvind de sidste 3 døgn');
   if (rawWave >= 1) reasons.push(`Bølger op til ${fmt(rawWave)} m`);
-  if (phase === 'under') reasons.push('Stormen står stadig på – rav ruller i brændingen');
+  if (blocked) reasons.push('Tanglinjen er dækket – vent, til vinden lægger sig');
+  else if (phase === 'under') reasons.push('Stormen står stadig på – rav ruller i brændingen');
   if (phase === 'fraland') reasons.push('Fralandsvind nu – intet nyt kommer ind');
   if (phase === 'efter' && rawPeak >= 8 && rawPeakAge > 0 && rawPeakAge <= 30) reasons.push('Vinden har lagt sig – godt tidspunkt');
   if (sl != null) reasons.push(sl < -0.2 ? 'Lavvande – stor strand fri' : sl > 0.3 ? 'Højvande – lidt strand' : 'Middel vandstand');
@@ -108,7 +113,7 @@ export function scoreAt(w, i, spot, brief = false) {
 
   return {
     score, level: levelOf(score), reasons,
-    f: { storm: +storm.toFixed(3), timing, trapF, tide: +tide.toFixed(3), peak: +rawPeak.toFixed(1), peakAge: rawPeakAge, wave: +rawWave.toFixed(2), drift: Math.round(drift), onNow: +onNow.toFixed(1), sl },
+    f: { storm: +storm.toFixed(3), timing, trapF, tide: +tide.toFixed(3), peak: +rawPeak.toFixed(1), peakAge: rawPeakAge, wave: +rawWave.toFixed(2), drift: Math.round(drift), onNow: +onNow.toFixed(1), sl, blocked },
   };
 }
 
