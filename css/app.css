@@ -615,5 +615,6 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 /* Vandstand som linje hen over søjlerne */
 .hours { position: relative; }
 .tide { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
-.tide polyline { fill: none; stroke: #8cc8ff; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; }
-.tide circle { fill: #8cc8ff; stroke: var(--bg, #000); stroke-width: 1; }
+.tide polyline { fill: none; stroke: #9fd3ff; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tide .halo { stroke: rgba(0, 0, 0, 0.75); stroke-width: 4.5; }
+.tide circle { fill: #9fd3ff; stroke: rgba(0, 0, 0, 0.8); stroke-width: 1.5; }
