@@ -1,4 +1,4 @@
-import { scoreAt, levelOf, LEVELS, lowTides, MODEL_VERSION } from './model.js';
+import { scoreAt, levelOf, LEVELS, lowTides, MODEL_VERSION, onshore, along } from './model.js';
 import { loadCoast, distance, bearing } from './spots.js';
 import { cachedWeather, fetchWeather, hourKey } from './weather.js';
 import * as store from './store.js';
@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 35; // samme nummer som cachen i sw.js
+const APP_VERSION = 36; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -231,6 +231,77 @@ function renderVerdict() {
   if (state.weatherError || age > 60 * 60 * 1000) sub = `Vejr fra ${clock(state.weather.fetchedAt)} – kunne ikke opdatere · ${sub}`;
   $('vSub').textContent = sub;
   $('btnNow').hidden = i === state.nowIdx;
+  renderWind();
+}
+
+/* Vindkompas: vinden i forhold til kysten, der hvor du er (ellers det bedste sted i filteret).
+   Kortet er altid nord-op, så kompasset følger kortet. */
+function windRef() {
+  if (state.me) {
+    const near = state.open.reduce((b, s) => (!b || distance(state.me, s.center) < distance(state.me, b.center) ? s : b), null);
+    if (near && distance(state.me, near.center) < 30000) return near;
+  }
+  return ranked()[0]?.spot;
+}
+function windInfo(i = state.selIdx) {
+  const spot = windRef();
+  if (!spot) return null;
+  const w = wFor(spot);
+  const ws = w.ws[i], wd = w.wd[i], on = onshore(ws, wd, spot.normal), al = along(ws, wd, spot.normal);
+  let kind = 'langs';
+  if (ws < 3) kind = 'stille';
+  else if (on > 2.5 && on >= Math.abs(al) * 0.6) kind = 'paa';
+  else if (on < -2.5 && -on >= Math.abs(al) * 0.6) kind = 'fra';
+  return { spot, ws, wd, on, kind, wave: w.wave[i], sl: w.sl[i] };
+}
+function renderWind() {
+  const info = windInfo();
+  const el = $('wind');
+  if (!info) { el.innerHTML = ''; $('windLabel').textContent = ''; return; }
+  const { spot, ws, wd, on, kind } = info;
+  // Styrke: pålandsvind over 7 m/s er "for meget" – højvande og brænding over tanglinjen
+  const level = kind === 'paa' ? (on > 7 ? 'hard' : 'ok') : kind;
+  const r = 27, c = 32;
+  const pt = (deg, rad) => [c + rad * Math.sin((deg * Math.PI) / 180), c - rad * Math.cos((deg * Math.PI) / 180)];
+  // Kysten: linje på tværs af havets retning; landsiden skraveret
+  const [ax, ay] = pt(spot.normal + 90, r), [bx, by] = pt(spot.normal - 90, r);
+  const land = spot.normal + 180;
+  const [l1x, l1y] = pt(land - 90, r), [l2x, l2y] = pt(land, r), [l3x, l3y] = pt(land + 90, r);
+  // Vindpil: fra der hvor vinden kommer fra, mod der hvor den blæser hen
+  const [fx, fy] = pt(wd, r - 6), [tx, ty] = pt(wd + 180, r - 6);
+  const ang = wd + 180;
+  const [h1x, h1y] = pt(ang + 150, 7).map((v, k) => v - c + (k ? ty : tx));
+  const [h2x, h2y] = pt(ang - 150, 7).map((v, k) => v - c + (k ? ty : tx));
+  el.className = `wind ${level}`;
+  el.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true">
+    <path class="land" d="M${l1x},${l1y} A${r},${r} 0 0 1 ${l2x},${l2y} A${r},${r} 0 0 1 ${l3x},${l3y} Z"/>
+    <path class="sea" d="M${l3x},${l3y} A${r},${r} 0 0 1 ${pt(spot.normal, r)[0]},${pt(spot.normal, r)[1]} A${r},${r} 0 0 1 ${l1x},${l1y} Z"/>
+    <line class="coast" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"/>
+    <circle class="ring" cx="${c}" cy="${c}" r="${r}"/>
+    <text class="n" x="${c}" y="9">N</text>
+    <line class="arrow" x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}"/>
+    <path class="head" d="M${tx},${ty} L${h1x},${h1y} L${h2x},${h2y} Z"/>
+    <text class="ws" x="${c}" y="${c + 4}">${Math.round(ws)}</text>
+  </svg>`;
+  const label = { paa: 'Pålandsvind', fra: 'Fralandsvind', langs: 'Langs kysten', stille: 'Stille' }[kind];
+  $('windLabel').textContent = label;
+  $('windLabel').className = `windLabel ${level}`;
+  el.setAttribute('aria-label', `Vind ${Math.round(ws)} meter i sekundet fra ${compass(wd, true)}: ${label.toLowerCase()}`);
+}
+function explainWind() {
+  const info = windInfo();
+  if (!info) return;
+  const { ws, wd, on, kind, wave, sl } = info;
+  const parts = [`${fmt(ws)} m/s fra ${compass(wd, true)}`];
+  if (kind === 'paa' && on > 7) parts.push('kraftig pålandsvind – brænding og højvande kan dække tanglinjen');
+  else if (kind === 'paa') parts.push('pålandsvind – fører rav ind');
+  else if (kind === 'fra') parts.push('fralandsvind – intet nyt kommer ind, men stranden er bred');
+  else if (kind === 'langs') parts.push('vinden går langs kysten');
+  else parts.push('næsten stille');
+  if (sl != null) parts.push(sl > 0.3 ? `højvande (+${Math.round(sl * 100)} cm)` : sl < -0.2 ? `lavvande (${Math.round(sl * 100)} cm)` : 'middel vandstand');
+  if (wave != null && wave >= 1.5) parts.push(`bølger ${fmt(wave)} m`);
+  haptic('light');
+  toast(parts.join(' · '));
 }
 
 function topScores() {
@@ -769,6 +840,7 @@ function bindUi() {
     haptic('selection');
     renderVerdict(); colorCoast(); renderPanel();
   });
+  $('wind').addEventListener('click', explainWind);
   $('btnNow').addEventListener('click', () => {
     state.selIdx = state.nowIdx;
     delete $('timeline').dataset.scrolled;

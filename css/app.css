@@ -584,3 +584,23 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 #btnNight { position: relative; }
 #btnNight[data-mode="auto"]::after { content: "A"; position: absolute; right: 6px; bottom: 5px; font: 700 9px/1 var(--sans); color: var(--mute); }
 #btnNight[data-mode="auto"][aria-pressed="true"]::after { color: var(--amber); }
+
+/* Vindkompas øverst til højre */
+.windCol { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; pointer-events: auto; }
+.wind { width: 64px; height: 64px; padding: 0; border-radius: 50%; background: rgba(20, 20, 22, 0.6); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 6px 18px rgba(0, 0, 0, 0.35); }
+.wind svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.wind .ring { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }
+.wind .land { fill: rgba(255, 255, 255, 0.1); }
+.wind .sea { fill: rgba(95, 143, 181, 0.22); }
+.wind .coast { stroke: rgba(245, 245, 242, 0.45); stroke-width: 1.2; stroke-dasharray: 2 2; }
+.wind .n { fill: var(--mute); font: 600 7px var(--sans); text-anchor: middle; }
+.wind .ws { fill: var(--fg); font: 600 15px var(--display); text-anchor: middle; }
+.wind .arrow { stroke: var(--fg); stroke-width: 2.4; stroke-linecap: round; opacity: 0.9; }
+.wind .head { fill: var(--fg); }
+.wind.ok .arrow, .wind.ok .head { stroke: var(--go); fill: var(--go); }
+.wind.hard .arrow, .wind.hard .head { stroke: var(--no); fill: var(--no); }
+.wind.fra .arrow, .wind.fra .head, .wind.stille .arrow, .wind.stille .head { stroke: var(--mute); fill: var(--mute); }
+.wind.ok .head { stroke: none; } .wind.hard .head { stroke: none; } .wind.fra .head, .wind.stille .head { stroke: none; }
+.windLabel { font: 600 10px var(--sans); letter-spacing: 0.04em; color: var(--mute); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); white-space: nowrap; }
+.windLabel.ok { color: var(--go); } .windLabel.hard { color: var(--no); }
+.now { margin-top: 2px; }
