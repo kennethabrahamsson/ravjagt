@@ -611,3 +611,9 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 .beach .ok { background: var(--go); }
 .beach .hard { background: var(--no); }
 .beach .past { opacity: 0.3; }
+
+/* Vandstand som linje hen over søjlerne */
+.hours { position: relative; }
+.tide { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.tide polyline { fill: none; stroke: #8cc8ff; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; }
+.tide circle { fill: #8cc8ff; stroke: var(--bg, #000); stroke-width: 1; }

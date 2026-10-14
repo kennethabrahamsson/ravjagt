@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 42; // samme nummer som cachen i sw.js
+const APP_VERSION = 43; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -349,6 +349,19 @@ function nextWindow(top = state._top) {
   return best;
 }
 
+// Vandstand som en linje hen over søjlerne: −0,8 m nederst, +0,8 m øverst; lavvande får en prik
+function tideSvg(idxs, sl) {
+  if (!sl?.some((v) => v != null)) return '';
+  const H = 28, step = 10, y = (v) => +(H - 2 - Math.max(0, Math.min(1, (v + 0.8) / 1.6)) * (H - 4)).toFixed(1);
+  const pts = [], lows = [];
+  idxs.forEach((i, k) => {
+    if (sl[i] == null) return;
+    pts.push(`${k * step + 4},${y(sl[i])}`);
+    if (sl[i - 1] != null && sl[i + 1] != null && sl[i] < sl[i - 1] && sl[i] <= sl[i + 1]) lows.push(`<circle cx="${k * step + 4}" cy="${y(sl[i])}" r="2.5"/>`);
+  });
+  return `<svg class="tide" width="${idxs.length * step}" height="${H}" aria-hidden="true"><polyline points="${pts.join(' ')}"/>${lows.join('')}</svg>`;
+}
+
 function renderTimeline() {
   const el = $('timeline');
   const s0 = state.weather.series[0];
@@ -356,6 +369,9 @@ function renderTimeline() {
   const start = Math.max(0, state.nowIdx - 6);
   const top = state._top || (state._top = topScores());
   const beach = (i) => windInfo(i, state._topSpot?.[i] || windRef())?.status || 'quiet';
+  // Vandstanden der, hvor du har valgt et sted – ellers ved nærmeste kyst
+  const tideSpot = state.spots.find((s) => s.id === state.view.spot) || windRef();
+  const sl = tideSpot ? wFor(tideSpot).sl : [];
   const BEACH = { hard: 'stranden er dækket', ok: 'kan gås, storm for nylig', quiet: 'kan gås, intet nyt' };
   const groups = new Map();
   for (let i = start; i < n; i++) {
@@ -376,7 +392,7 @@ function renderTimeline() {
       const cls = ['h', lvl, s0.isDay[i] === 0 ? 'dark' : '', i === state.selIdx ? 'sel' : '', i < state.nowIdx ? 'past' : ''].join(' ');
       html.push(`<button class="${cls}" data-i="${i}" aria-label="${timeLabel(s0.time[i])}: ${LEVELS[lvl].label}, ${BEACH[b]}"><i style="height:${Math.max(10, top[i])}%;--d:${Math.min(i - start, 40) * 8}ms"></i></button>`);
     }
-    html.push(`</div><div class="beach" aria-hidden="true">${strip.join('')}</div></div>`);
+    html.push(`${tideSvg(idxs, sl)}</div><div class="beach" aria-hidden="true">${strip.join('')}</div></div>`);
   }
   el.innerHTML = html.join('');
   el.classList.remove('grow'); void el.offsetWidth; el.classList.add('grow');
@@ -875,7 +891,7 @@ function bindUi() {
     if (s) return openSpot(s.dataset.spot);
     const a = e.target.closest('[data-act]');
     if (!a) return;
-    if (a.dataset.act === 'back') { state.view.spot = null; renderPanel(); }
+    if (a.dataset.act === 'back') { state.view.spot = null; renderPanel(); renderTimeline(); }
     if (a.dataset.act === 'all') { state.view.showAll = !state.view.showAll; renderPanel(); }
   });
   $('scopes').addEventListener('click', (e) => {
@@ -987,6 +1003,7 @@ function bindSlide() {
 function openSpot(id) {
   state.view.spot = id;
   switchTab('steder');
+  renderTimeline();
   if ($('sheet').dataset.state === 'peek') setSheet('mid');
   renderPanel();
   const spot = state.spots.find((s) => s.id === id);
