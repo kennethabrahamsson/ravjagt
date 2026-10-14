@@ -127,6 +127,8 @@ export function createMap(el, { onSpotClick, onDragStart } = {}) {
       if (!points.length) return;
       let w = 180, s = 90, e = -180, n = -90;
       for (const [la, lo] of points) { w = Math.min(w, lo); e = Math.max(e, lo); s = Math.min(s, la); n = Math.max(n, la); }
+      // Nulstil den afstand, focus() har sat – ellers lægges den oveni, og kortet kan ikke passe og flytter sig ikke
+      map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
       map.fitBounds([[w, s], [e, n]], { padding: { top: top + 12, bottom: bottom + 12, left: 16, right: 60 }, duration: 600 });
     },
     getZoom: () => map.getZoom(),

@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 36; // samme nummer som cachen i sw.js
+const APP_VERSION = 37; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -20,7 +20,7 @@ const state = {
 };
 
 /* ---------- Kort ---------- */
-const mv = createMap('map', { onSpotClick: (id) => openSpot(id), onDragStart: () => { lastPan = Date.now(); } });
+const mv = createMap('map', { onSpotClick: (id) => openSpot(id), onDragStart: () => { lastPan = Date.now(); state.userMoved = true; } });
 let layerName = store.prefs().layer === 'foto' ? 'foto' : 'kort';
 mv.setLayer(layerName);
 $('map').classList.toggle('foto', layerName === 'foto');
@@ -577,7 +577,8 @@ function onPosition(pos) {
   if (firstFix) {
     firstFix = false;
     // Er du i Danmark, starter kortet ved dig
-    if (!state.trip && inDK(state.me)) focus(state.me, 11);
+    // Kun hvis du ikke selv har valgt en landsdel eller flyttet kortet
+    if (!state.trip && inDK(state.me) && state.scope === 'near' && !state.userMoved) focus(state.me, 11);
     if (state.ready) { renderScope(); if (state.scope === 'near') colorCoast(); }
   }
   if (state.trip) {
@@ -858,6 +859,7 @@ function bindUi() {
     const c = e.target.closest('[data-scope]');
     if (!c) return;
     if (c.dataset.scope === state.scope) return;
+    state.userMoved = true;
     state.scope = c.dataset.scope;
     state.view.showAll = false;
     state.view.spot = null; // tilbage til listen
