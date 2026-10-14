@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 41; // samme nummer som cachen i sw.js
+const APP_VERSION = 42; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -226,7 +226,12 @@ function renderVerdict() {
   bits.push(windText(w.ws[i], w.wd[i]));
   bits.push(dark ? 'mørkt' : 'lyst');
   let sub = bits.join(' · ');
-  if (best.r.level !== 'green' && next) sub = `Næste gode tur: ${timeLabel(w.time[next.start])} · ${sub}`;
+  if (best.r.level !== 'green' && next) {
+    // Vinduet fra første til sidste grønne time – og den bedste time i det
+    const hr = (k) => pad(new Date(w.time[Math.min(k, w.time.length - 1)]).getHours());
+    const span = `${timeLabel(w.time[next.start], true)}–${hr(next.end + 1)}`;
+    sub = `Næste gode tur: ${span}${next.peak !== next.start ? `, bedst kl. ${hr(next.peak)}` : ''} · ${sub}`;
+  }
   const age = Date.now() - state.weather.fetchedAt;
   if (state.weatherError || age > 60 * 60 * 1000) sub = `Vejr fra ${clock(state.weather.fetchedAt)} – kunne ikke opdatere · ${sub}`;
   $('vSub').textContent = sub;
@@ -336,8 +341,8 @@ function nextWindow(top = state._top) {
   let best = null;
   for (let i = state.nowIdx; i < top.length; i++) {
     if (levelOf(top[i]) === 'green') {
-      if (!best) best = { start: i, end: i };
-      else if (i === best.end + 1) best.end = i;
+      if (!best) best = { start: i, end: i, peak: i };
+      else if (i === best.end + 1) { best.end = i; if (top[i] > top[best.peak]) best.peak = i; }
       else break;
     }
   }
