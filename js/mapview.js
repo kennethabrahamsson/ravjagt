@@ -19,7 +19,7 @@ function pinEl(cls) {
 }
 const COLOR_IDLE = '#5b6b70';
 
-export function createMap(el, { onSpotClick, onDragStart } = {}) {
+export function createMap(el, { onSpotClick, onDragStart, onFindClick } = {}) {
   const dem = new mlcontour.DemSource({
     url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     encoding: 'terrarium', maxzoom: 13, worker: true,
@@ -51,6 +51,7 @@ export function createMap(el, { onSpotClick, onDragStart } = {}) {
     map.on('click', 'coast-hit', (e) => { const f = e.features?.[0]; if (f && onSpotClick) onSpotClick(f.properties.sid); });
     map.on('mouseenter', 'coast-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'coast-hit', () => { map.getCanvas().style.cursor = ''; });
+    map.on('click', 'past-finds', (e) => { const f = e.features?.[0]; if (f && onFindClick) onFindClick(f.properties); });
   });
 
   const api = {
@@ -111,6 +112,11 @@ export function createMap(el, { onSpotClick, onDragStart } = {}) {
       if (!trip) return;
       markers.start = new maplibregl.Marker({ element: pinEl('startPin').outer, anchor: 'bottom' }).setLngLat(ll(trip.start)).addTo(map);
       trip.findPts.forEach((f) => api.addFind(f));
+    },
+    /** Alle tidligere fund: [{ lat, lon, t }] */
+    setPastFinds(list) {
+      const data = { type: 'FeatureCollection', features: list.map((f) => ({ type: 'Feature', properties: { t: f.t, n: f.n }, geometry: { type: 'Point', coordinates: [f.lon, f.lat] } })) };
+      ready.then(() => map.getSource('pastFinds').setData(data));
     },
     updateTrack(parts) { ready.then(() => map.getSource('track').setData(lines(parts))); },
     setHome(a, b) { ready.then(() => map.getSource('home').setData(lines([[a, b]]))); },
@@ -193,6 +199,7 @@ function style(dem) {
       coast: { type: 'geojson', data: EMPTY },
       traps: { type: 'geojson', data: EMPTY },
       track: { type: 'geojson', data: EMPTY },
+      pastFinds: { type: 'geojson', data: EMPTY },
       home: { type: 'geojson', data: EMPTY },
       acc: { type: 'geojson', data: EMPTY },
     },
@@ -225,6 +232,10 @@ function style(dem) {
           'line-opacity': ['case', ['boolean', ['feature-state', 'on'], true], 0.95, 0.35] } },
       { id: 'coast-hit', type: 'line', source: 'coast', filter: ['==', ['get', 'open'], 1], paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 24 } },
       { id: 'traps', type: 'line', source: 'traps', minzoom: 13, paint: { 'line-color': '#f5f5f2', 'line-opacity': 0.75, 'line-width': 2 } },
+
+      // Tidligere fund: små rav-prikker, der bliver større, når man zoomer ind
+      { id: 'past-finds-glow', type: 'circle', source: 'pastFinds', paint: { 'circle-color': '#ffb72b', 'circle-opacity': 0.28, 'circle-blur': 0.8, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 5, 14, 14] } },
+      { id: 'past-finds', type: 'circle', source: 'pastFinds', paint: { 'circle-color': '#ffb72b', 'circle-stroke-color': '#1a1206', 'circle-stroke-width': 1.5, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 14, 6] } },
 
       // Din position og turen
       { id: 'acc', type: 'fill', source: 'acc', paint: { 'fill-color': '#4aa3ff', 'fill-opacity': 0.08 } },

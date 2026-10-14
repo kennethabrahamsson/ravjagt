@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 44; // samme nummer som cachen i sw.js
+const APP_VERSION = 45; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -20,7 +20,7 @@ const state = {
 };
 
 /* ---------- Kort ---------- */
-const mv = createMap('map', { onSpotClick: (id) => openSpot(id), onDragStart: () => { lastPan = Date.now(); state.userMoved = true; } });
+const mv = createMap('map', { onSpotClick: (id) => openSpot(id), onFindClick: (p) => findInfo(p), onDragStart: () => { lastPan = Date.now(); state.userMoved = true; } });
 let layerName = store.prefs().layer === 'foto' ? 'foto' : 'kort';
 mv.setLayer(layerName);
 $('map').classList.toggle('foto', layerName === 'foto');
@@ -107,6 +107,7 @@ async function init() {
   state.points = coast.points;
   state.trapLines = coast.trapLines;
   drawCoast();
+  showPastFinds();
   const resumed = store.activeTrip();
   if (resumed) resumeTrip(resumed);
   startLocating();
@@ -563,6 +564,7 @@ async function runSync() {
   state.syncing = false;
   state.syncResult = r;
   $('tab-ture').innerHTML = tripsHtml();
+  showPastFinds();
   if (r.ok && r.added) toast(`${r.added} ${r.added === 1 ? 'tur' : 'ture'} hentet fra Airtable`);
 }
 
@@ -741,6 +743,19 @@ function addFindMarker(f) {
   mv.addFind(f);
 }
 
+// Fund fra afsluttede ture ligger altid på kortet – også under en ny tur
+function showPastFinds() {
+  const list = [];
+  for (const t of store.trips()) {
+    (t.findPts || []).forEach((f) => list.push({ lat: f[0], lon: f[1], t: f[2] || Date.parse(t.startedAt), n: t.findPts.length }));
+  }
+  mv.setPastFinds(list);
+}
+function findInfo(p) {
+  const d = new Date(+p.t);
+  toast(`Fund ${d.getDate()}. ${['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'][d.getMonth()]} ${d.getFullYear()} kl. ${pad(d.getHours())}:${pad(d.getMinutes())}`);
+}
+
 let findsCount = 0;
 function openEnd() {
   const t = state.trip;
@@ -763,6 +778,7 @@ function finishTrip() {
   };
   store.saveTrip(done);
   leaveTripUi();
+  showPastFinds();
   switchTab('ture');
   renderPanel();
   haptic('success');
@@ -926,6 +942,7 @@ function bindUi() {
       store.deleteTrip(a.dataset.id);
       state.view.confirmDelete = null;
       toast('Turen er slettet');
+      showPastFinds();
       runSync();
     }
     if (a.dataset.act === 'sync-setup') { state.view.syncSetup = true; state.view.syncError = null; }
