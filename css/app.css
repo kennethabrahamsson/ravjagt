@@ -597,10 +597,10 @@ html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-si
 .wind .ws { fill: var(--fg); font: 600 15px var(--display); text-anchor: middle; }
 .wind .arrow { stroke: var(--fg); stroke-width: 2.4; stroke-linecap: round; opacity: 0.9; }
 .wind .head { fill: var(--fg); }
-.wind.ok .arrow, .wind.ok .head { stroke: var(--go); fill: var(--go); }
-.wind.hard .arrow, .wind.hard .head { stroke: var(--no); fill: var(--no); }
-.wind.fra .arrow, .wind.fra .head, .wind.stille .arrow, .wind.stille .head { stroke: var(--mute); fill: var(--mute); }
-.wind.ok .head { stroke: none; } .wind.hard .head { stroke: none; } .wind.fra .head, .wind.stille .head { stroke: none; }
+.wind .head { stroke: none; }
+.wind.quiet .arrow { stroke: var(--mute); } .wind.quiet .head { fill: var(--mute); }
+.wind.ok .arrow { stroke: var(--go); } .wind.ok .head { fill: var(--go); }
+.wind.hard .arrow { stroke: var(--no); } .wind.hard .head { fill: var(--no); }
 .windLabel { font: 600 10px var(--sans); letter-spacing: 0.04em; color: var(--mute); text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); white-space: nowrap; }
 .windLabel.ok { color: var(--go); } .windLabel.hard { color: var(--no); }
 .now { margin-top: 2px; }

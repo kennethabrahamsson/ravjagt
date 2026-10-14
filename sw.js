@@ -1,5 +1,5 @@
 // Offline: appen selv caches ved installation, kortfliser og vejr caches undervejs.
-const VERSION = 'ravjagt-v37';
+const VERSION = 'ravjagt-v38';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/model.js', 'js/spots.js', 'js/weather.js', 'js/store.js', 'js/sync.js',
   'data/dk.json', 'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css', 'vendor/maplibre/maplibre-contour.min.js', 'js/mapview.js', 'manifest.webmanifest',

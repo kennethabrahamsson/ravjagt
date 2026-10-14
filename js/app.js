@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 37; // samme nummer som cachen i sw.js
+const APP_VERSION = 38; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -252,15 +252,21 @@ function windInfo(i = state.selIdx) {
   if (ws < 3) kind = 'stille';
   else if (on > 2.5 && on >= Math.abs(al) * 0.6) kind = 'paa';
   else if (on < -2.5 && -on >= Math.abs(al) * 0.6) kind = 'fra';
-  return { spot, ws, wd, on, kind, wave: w.wave[i], sl: w.sl[i] };
+  const wave = w.wave[i], sl = w.sl[i];
+  // Kan man gå på stranden nu? Og har en storm bragt noget ind de sidste 1–3 døgn?
+  const blocked = on > 7 || ws > 12 || (sl != null && wave != null && sl > 0.3 && wave >= 1.8);
+  const f = score(spot, i).f;
+  const storm = f.peak >= 8 && f.peakAge != null && f.peakAge <= 72 ? { ws: f.peak, age: f.peakAge } : null;
+  const status = blocked ? 'hard' : storm ? 'ok' : 'quiet';
+  return { spot, ws, wd, on, kind, wave, sl, status, storm };
 }
 function renderWind() {
   const info = windInfo();
   const el = $('wind');
   if (!info) { el.innerHTML = ''; $('windLabel').textContent = ''; return; }
-  const { spot, ws, wd, on, kind } = info;
-  // Styrke: pålandsvind over 7 m/s er "for meget" – højvande og brænding over tanglinjen
-  const level = kind === 'paa' ? (on > 7 ? 'hard' : 'ok') : kind;
+  const { spot, ws, wd, kind, status } = info;
+  // Farve: rød = tanglinjen er dækket, grøn = kan gå og der har været storm, grå = kan gå men intet nyt
+  const level = status;
   const r = 27, c = 32;
   const pt = (deg, rad) => [c + rad * Math.sin((deg * Math.PI) / 180), c - rad * Math.cos((deg * Math.PI) / 180)];
   // Kysten: linje på tværs af havets retning; landsiden skraveret
@@ -291,13 +297,14 @@ function renderWind() {
 function explainWind() {
   const info = windInfo();
   if (!info) return;
-  const { ws, wd, on, kind, wave, sl } = info;
+  const { ws, wd, on, kind, wave, sl, status, storm } = info;
   const parts = [`${fmt(ws)} m/s fra ${compass(wd, true)}`];
-  if (kind === 'paa' && on > 7) parts.push('kraftig pålandsvind – brænding og højvande kan dække tanglinjen');
-  else if (kind === 'paa') parts.push('pålandsvind – fører rav ind');
-  else if (kind === 'fra') parts.push('fralandsvind – intet nyt kommer ind, men stranden er bred');
+  if (status === 'hard') parts.push(on > 7 ? 'kraftig pålandsvind – brænding og højvande dækker tanglinjen' : 'for meget vind og vand til at nå tanglinjen');
+  else if (kind === 'paa') parts.push('svag pålandsvind – stranden er til at gå på');
+  else if (kind === 'fra') parts.push('fralandsvind – vandet falder, og stranden er bred');
   else if (kind === 'langs') parts.push('vinden går langs kysten');
   else parts.push('næsten stille');
+  parts.push(storm ? `storm for ${storm.age < 36 ? `${storm.age} t` : `${Math.round(storm.age / 24)} døgn`} siden: op til ${fmt(storm.ws)} m/s ind mod land` : 'ingen storm de sidste 3 døgn – næppe noget nyt');
   if (sl != null) parts.push(sl > 0.3 ? `højvande (+${Math.round(sl * 100)} cm)` : sl < -0.2 ? `lavvande (${Math.round(sl * 100)} cm)` : 'middel vandstand');
   if (wave != null && wave >= 1.5) parts.push(`bølger ${fmt(wave)} m`);
   haptic('light');
