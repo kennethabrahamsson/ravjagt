@@ -234,8 +234,9 @@ function style(dem) {
       { id: 'traps', type: 'line', source: 'traps', minzoom: 13, paint: { 'line-color': '#f5f5f2', 'line-opacity': 0.75, 'line-width': 2 } },
 
       // Tidligere fund: små rav-prikker, der bliver større, når man zoomer ind
-      { id: 'past-finds-glow', type: 'circle', source: 'pastFinds', paint: { 'circle-color': '#ffb72b', 'circle-opacity': 0.28, 'circle-blur': 0.8, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 5, 14, 14] } },
-      { id: 'past-finds', type: 'circle', source: 'pastFinds', paint: { 'circle-color': '#ffb72b', 'circle-stroke-color': '#1a1206', 'circle-stroke-width': 1.5, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 14, 6] } },
+      // Mørk skygge + hvid ring, så prikken skiller sig ud fra en gul eller grøn kyst
+      { id: 'past-finds-shadow', type: 'circle', source: 'pastFinds', paint: { 'circle-color': '#000', 'circle-opacity': 0.55, 'circle-blur': 0.6, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 7, 14, 13] } },
+      { id: 'past-finds', type: 'circle', source: 'pastFinds', paint: { 'circle-color': '#ffb72b', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 6, 1.5, 14, 2.5], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3.5, 14, 7] } },
 
       // Din position og turen
       { id: 'acc', type: 'fill', source: 'acc', paint: { 'fill-color': '#4aa3ff', 'fill-opacity': 0.08 } },
