@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 40; // samme nummer som cachen i sw.js
+const APP_VERSION = 41; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -237,7 +237,7 @@ function renderVerdict() {
 /* Vindkompas: vinden i forhold til kysten, der hvor du er (ellers det bedste sted i filteret).
    Kortet er altid nord-op, så kompasset følger kortet. */
 function windRef() {
-  if (state.me) {
+  if (state.me && state.scope === 'near') {
     // Nærmeste kyst – men står du mellem hav og fjord, er det havet, der tæller
     const near = state.open.reduce((b, s) => (!b || distance(state.me, s.center) < distance(state.me, b.center) ? s : b), null);
     if (near && distance(state.me, near.center) < 30000) {
@@ -248,8 +248,7 @@ function windRef() {
   }
   return ranked()[0]?.spot;
 }
-function windInfo(i = state.selIdx) {
-  const spot = windRef();
+function windInfo(i = state.selIdx, spot = windRef()) {
   if (!spot) return null;
   const w = wFor(spot);
   const ws = w.ws[i], wd = w.wd[i], on = onshore(ws, wd, spot.normal), al = along(ws, wd, spot.normal);
@@ -321,9 +320,11 @@ function topScores() {
   const n = state.weather.series[0].time.length;
   const start = Math.max(0, state.nowIdx - 6);
   const top = new Array(n).fill(0);
+  // Hvilken strækning søjlen står for – stregen under søjlen viser samme sted
+  const where = state._topSpot = new Array(n).fill(null);
   for (let i = start; i < n; i++) {
     let m = 0;
-    for (const s of spots) { const v = quick(s, i); if (v > m) m = v; }
+    for (const s of spots) { const v = quick(s, i); if (v > m) { m = v; where[i] = s; } }
     top[i] = m;
   }
   return top;
@@ -349,7 +350,7 @@ function renderTimeline() {
   const n = s0.time.length;
   const start = Math.max(0, state.nowIdx - 6);
   const top = state._top || (state._top = topScores());
-  const beach = (i) => windInfo(i)?.status || 'quiet';
+  const beach = (i) => windInfo(i, state._topSpot?.[i] || windRef())?.status || 'quiet';
   const BEACH = { hard: 'stranden er dækket', ok: 'kan gås, storm for nylig', quiet: 'kan gås, intet nyt' };
   const groups = new Map();
   for (let i = start; i < n; i++) {
