@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const COLORS = { green: '#3ddc84', yellow: '#ffc94d', red: '#ff5a4e' };
 const DAYS = ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'];
 const NEAR_KM = 30;
-const APP_VERSION = 38; // samme nummer som cachen i sw.js
+const APP_VERSION = 39; // samme nummer som cachen i sw.js
 const DK = [[54.55, 8.0], [57.78, 12.75]];
 
 const state = {
@@ -238,8 +238,13 @@ function renderVerdict() {
    Kortet er altid nord-op, så kompasset følger kortet. */
 function windRef() {
   if (state.me) {
+    // Nærmeste kyst – men står du mellem hav og fjord, er det havet, der tæller
     const near = state.open.reduce((b, s) => (!b || distance(state.me, s.center) < distance(state.me, b.center) ? s : b), null);
-    if (near && distance(state.me, near.center) < 30000) return near;
+    if (near && distance(state.me, near.center) < 30000) {
+      const sea = (s) => s.fetch.reduce((a, b) => a + b, 0);
+      const limit = distance(state.me, near.center) + 4000;
+      return state.open.filter((s) => distance(state.me, s.center) <= limit).reduce((b, s) => (sea(s) > sea(b) ? s : b), near);
+    }
   }
   return ranked()[0]?.spot;
 }
